@@ -54,7 +54,8 @@
 <h2>各幣建議</h2>
 <div id="out"></div>
 
-<script src="strategy.js"></script>
+<!-- 改 strategy.js 時把 v 加 1，瀏覽器才會抓新版而不是用快取 -->
+<script src="strategy.js?v=6"></script>
 <script>
   const $ = id => document.getElementById(id);
   const pct = v => (v >= 0 ? '+' : '') + (v * 100).toFixed(1) + '%';
