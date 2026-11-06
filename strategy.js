@@ -12,8 +12,11 @@ const H8 = 288e5;     // 8 小時（毫秒），資金費率結算週期
 const WARMUP = 200;   // 200 均線需要的暖機根數
 const MAX_HOLD = 20;  // 止損止盈都沒碰到時，最多持有幾根 K 線
 const MAX_K = 3;      // research 腳本最多組合幾個條件
-// 研究選出的規則：做多版是主策略，放空版是鏡像對照組。止損 3 ATR／止盈 4 ATR
-const RULE = { ids: [0, 2, 3], ex: { sl: 3, tp: 4 } };
+// 研究選出的規則：做多版是主策略，放空版是鏡像對照組。止損 3 ATR，止盈＝止損 × 盈虧比
+// 盈虧比預設 2、最低 1.5（research4.js：設 2 倍時實際盈虧比約 1.5，設 1.5 倍實際只有約 1.3）
+const MIN_RR = 1.5, DEFAULT_RR = 2;
+const RULE = { ids: [0, 2, 3], ex: { sl: 3, tp: 3 * DEFAULT_RR } };
+const exitFor = rr => ({ sl: RULE.ex.sl, tp: RULE.ex.sl * Math.max(MIN_RR, +rr || DEFAULT_RR) });
 // 合併驗證固定用這 10 個幣，結果不隨使用者清單改變
 const BASKET = ['BTC', 'ETH', 'BNB', 'SOL', 'XRP', 'DOGE', 'ADA', 'AVAX', 'LINK', 'TRX'];
 const TF = {
@@ -163,10 +166,10 @@ function stats(tr) {
 }
 
 // 一個幣、一個方向跑主規則
-function runRule(bars, dir, fund) {
+function runRule(bars, dir, fund, ex = RULE.ex) {
   const x = indicators(bars);
   const cand = makeCand(condOn(x, bars.length, dir), RULE.ids, dir);
-  const r = backtest(bars, x, cand, RULE.ex, fund);
+  const r = backtest(bars, x, cand, ex, fund);
   return { dir, name: cand.name, ...r, own: stats(r.trades) };
 }
 
@@ -279,6 +282,7 @@ if (typeof module !== 'undefined') {
     const L = { px: 100, stop: 98, target: 102 }, S = { px: 100, stop: 102, target: 98 };
     assert.deepStrictEqual([97.9, 102.1, 101.5, 100.5].map(v => freshness(L, 1, v)), ['stop', 'target', 'late', 'ok']);
     assert.deepStrictEqual([102, 97.5, 98.9, 101].map(v => freshness(S, -1, v)), ['stop', 'target', 'late', 'ok']);
+    assert.deepStrictEqual([exitFor(2), exitFor(1.2), exitFor(''), exitFor(3)].map(e => e.tp / e.sl), [2, 1.5, 2, 3]);
     assert.deepStrictEqual([coinOk({ n: 5, avg: -1 }), coinOk({ n: 10, avg: -1 }), coinOk({ n: 10, avg: 0.01 })], [true, false, true]);
     // 資金費率：區間含頭不含尾；合約上市前每 8 小時扣 FUND
     const ff = fundingFn([{ t: 10 * H8, r: 0.001 }, { t: 11 * H8, r: -0.0005 }]);
