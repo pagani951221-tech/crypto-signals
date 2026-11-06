@@ -23,6 +23,7 @@ const TF = {
   '1d': { label: '日線', pages: 4, ms: 864e5 },
   '4h': { label: '4 小時', pages: 10, ms: 144e5 },
   '1h': { label: '1 小時', pages: 15, ms: 36e5 },
+  '15m': { label: '15 分鐘', pages: 70, ms: 9e5 }, // 約 2 年，滾動驗證至少要跨一個年度
 };
 
 function sma(a, n) {
@@ -207,19 +208,33 @@ function freshness(pos, d, live) {
 
 const API = 'https://data-api.binance.vision/api/v3';
 
+async function klines(symbol, tf, q) {
+  // 代號不存在時 Binance 回的錯誤沒有 CORS 標頭，瀏覽器只會丟出網路錯誤
+  const res = await fetch(`${API}/klines?symbol=${symbol}&interval=${tf}&limit=1000${q}`).catch(() => null);
+  if (!res || !res.ok) throw new Error(`${symbol}：取不到資料，請確認代號是否正確（Binance 現貨、以 USDT 計價）或網路是否正常`);
+  return (await res.json()).map(v => ({ t: v[0], o: +v[1], h: +v[2], l: +v[3], c: +v[4], T: v[6] }));
+}
+
+// 已收盤的 K 線記在記憶體裡；之後只補抓最後一根之後的（自動更新時不必重抓整段歷史）
+const barCache = {};
 async function fetchBars(symbol, tf = '1d') {
-  let bars = [], end;
-  for (let p = 0; p < TF[tf].pages; p++) {
-    // 代號不存在時 Binance 回的錯誤沒有 CORS 標頭，瀏覽器只會丟出網路錯誤
-    const res = await fetch(`${API}/klines?symbol=${symbol}&interval=${tf}&limit=1000` + (end ? `&endTime=${end}` : '')).catch(() => null);
-    if (!res || !res.ok) throw new Error(`${symbol}：取不到資料，請確認代號是否正確（Binance 現貨、以 USDT 計價）或網路是否正常`);
-    const k = await res.json();
-    if (!k.length) break;
-    bars = k.map(v => ({ t: v[0], o: +v[1], h: +v[2], l: +v[3], c: +v[4], T: v[6] })).concat(bars);
-    if (k.length < 1000) break;
-    end = k[0][0] - 1;
+  const key = `${symbol}|${tf}`, old = barCache[key];
+  let bars;
+  const fresh = old && await klines(symbol, tf, `&startTime=${old.at(-1).t + 1}`);
+  if (fresh && fresh.length < 1000) bars = old.concat(fresh);
+  else {
+    bars = [];
+    let end;
+    for (let p = 0; p < TF[tf].pages; p++) {
+      const k = await klines(symbol, tf, end ? `&endTime=${end}` : '');
+      if (!k.length) break;
+      bars = k.concat(bars);
+      if (k.length < 1000) break;
+      end = k[0].t - 1;
+    }
   }
   if (bars.length && bars.at(-1).T > Date.now()) bars.pop(); // 丟掉還沒收盤的 K 線
+  if (bars.length) barCache[key] = bars;
   return bars;
 }
 
