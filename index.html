@@ -223,7 +223,7 @@
     <h2 id="headline">讀取行情中…</h2>
     <p id="reason"></p>
     <p id="status"></p>
-    <p class="alert" id="twnote" hidden><b>台股是實驗性質：</b>範圍是上市＋上櫃全部普通股，規則和加密貨幣不同：收盤創 52 週新高、且成交金額放大到近 20 天平均的 2 倍以上才買，跌破 50 日均線才賣。這條規則勝率只有約三成，是靠少數大漲的股票撐起平均，連續停損很正常；2017、2018、2022 年整年是虧的，賺錢集中在多頭年。近 20 天平均每天成交不到 1,000 萬元的股票不給訊號。資料每個交易日 14:40 後由雲端更新（來源：證交所、櫃買中心、Yahoo Finance，價格為還原權息價）。只做多、不開槓桿。</p>
+    <p class="alert" id="twnote" hidden><b>台股是實驗性質：</b>範圍是上市＋上櫃全部普通股，規則和加密貨幣不同：收盤創 52 週新高、成交金額放大到近 20 天平均的 2 倍以上、而且最新月營收創 12 個月新高才買，跌破 50 日均線才賣。這條規則勝率只有約三成，是靠少數大漲的股票撐起平均，連續停損很正常；2017 年整年虧錢，2018、2022 年接近打平，賺錢集中在多頭年。近 20 天平均每天成交不到 1,000 萬元的股票不給訊號。資料每個交易日 14:40 後由雲端更新（來源：證交所、櫃買中心、Yahoo Finance，價格為還原權息價）。只做多、不開槓桿。</p>
     <div class="pick">
       <label for="pick" id="pickl">查看其他幣</label>
       <input id="pick" list="coinlist" autocomplete="off" spellcheck="false" placeholder="選擇或輸入代號，例如 PEPE">
@@ -379,6 +379,15 @@ ${exitTxt}`, text: head + sizeText(live, p, d, r),
       <span class="word">${j.label}</span><span class="one">${esc(j.one)}</span></button>`).join('');
   }
 
+  // 台股：最新月營收與新聞、財報連結（新聞沒有可回測的歷史，只給參考、不列入判斷）
+  function twInfo(it) {
+    const q = `https://tw.stock.yahoo.com/quote/${it.sym}.${it.mkt}`, r = it.rev, a = (path, t) => `<a href="${q}/${path}" target="_blank" rel="noopener">${t}</a>`;
+    const revTxt = !r ? '公開資訊觀測站沒有這檔的月營收資料，這條規則不會對它進場。'
+      : `最新月營收（${r[0].replace('-', ' 年 ')} 月）年增 ${r[1] == null ? '—' : pct(r[1] / 100)}，${r[2] ? '<b>創 12 個月新高</b>' : '沒有創 12 個月新高（規則要創新高才會進場）'}。`;
+    return `<h4>營收與消息</h4><p>${revTxt}</p>
+      <p class="meta">Yahoo 股市（另開視窗）：${a('news', '新聞')} · ${a('revenue', '月營收')} · ${a('eps', 'EPS')}。新聞不列入判斷：沒有可以回測的歷史資料，看了再自己決定要不要避開。</p>`;
+  }
+
   function renderDetail(hit) {
     $('detail').hidden = !hit; $('detail').parentElement.classList.toggle('solo', !hit);
     if (!hit) return;
@@ -390,6 +399,7 @@ ${exitTxt}`, text: head + sizeText(live, p, d, r),
     $('detail').innerHTML = `<div class="head"><h3>${item.full ?? item.sym}</h3><span class="px">${isTW() ? '收盤價' : '即時價'} ${price(item.live)}</span></div>
       <span class="badge ${j.k}">${j.label}</span>
       <div class="say">${body}</div>
+      ${item.tw ? twInfo(item) : ''}
       <h4>這${isTW() ? '檔股票' : '個幣'}全部歷史的回測</h4>
       <div class="scroll"><table><tr><th>方向</th><th>平均每筆</th><th>勝率</th><th>盈虧比</th><th>最差一筆</th><th>筆數</th></tr>${rows}</table></div>
       ${item.perp === false ? '<p class="meta" style="margin-top:8px">此幣沒有永續合約，放空回測用固定資金費率估計。</p>' : ''}`;
@@ -581,7 +591,7 @@ ${exitTxt}`, text: head + sizeText(live, p, d, r),
     catch { $('go').disabled = false; $('headline').textContent = '暫時讀不到台股資料'; $('reason').textContent = '台股資料由雲端每個交易日 14:40 後更新，請稍後再試。'; $('status').textContent = ''; return; }
     twCost = j.cost; twValid = j.nValid ?? j.stocks.length; twRule = j.rule ?? twRule;
     items = j.stocks.map(s => ({
-      sym: s.code, label: s.name, full: `${s.name}（${s.code}）`, tw: true, show: true, illiquid: s.illiquid, liq: s.liq, live: s.close, lastT: s.lastT,
+      sym: s.code, label: s.name, full: `${s.name}（${s.code}）`, tw: true, mkt: s.mkt, rev: s.rev, show: true, illiquid: s.illiquid, liq: s.liq, live: s.close, lastT: s.lastT,
       bars: s.chart ? s.chart.map(c => ({ t: c[0], o: c[1], h: c[2], l: c[3], c: c[4] })) : null,
       ma: s.chart ? s.chart.map(c => c[5]) : null,
       runs: [{ dir: 1, state: s.state, pos: s.pos, own: s.own, trades: [] }],

@@ -5,7 +5,9 @@ const fs = require('fs');
 const S = require('./strategy.js');
 const R = require('./tw-rule.js');
 const { send } = require('./telegram.js');
-const { TW_COST, universeAll, bars, addWeekdays } = require('./tw-data.js');
+const { TW_COST, universeAll, bars, revenue, addWeekdays } = require('./tw-data.js');
+
+const REV = '.state/tw-rev.json'; // 月營收歷史，由 Actions 快取保存，每天只補抓缺的月份
 
 const PAGE = 'https://pagani951221-tech.github.io/crypto-signals/';
 const pct = v => (v >= 0 ? '+' : '−') + Math.abs(v * 100).toFixed(1) + '%';
@@ -16,8 +18,22 @@ const CLOSE = 4.5 * 36e5; // 09:00 開盤到 13:30 收盤
 // stats 的 Infinity 存成 JSON 會變 null，先換掉
 const clean = st => ({ ...st, payoff: Number.isFinite(st.payoff) ? st.payoff : null });
 
+// 月營收：讀快取，補抓缺的月份；最近 3 個月一律重抓（公司會更正）
+async function loadRevenue() {
+  let db = {};
+  try { db = JSON.parse(fs.readFileSync(REV)); } catch {}
+  const have = new Set(Object.values(db).flatMap(o => Object.keys(o))), want = [];
+  for (let ym = '2015-01', end = R.latestYm(Date.now()); ym <= end; ym = R.ymAdd(ym, 1)) want.push(ym);
+  const months = want.filter((ym, i) => !have.has(ym) || i >= want.length - 3);
+  console.log(`月營收：補抓 ${months.length} 個月`);
+  for (const [code, m] of Object.entries(await revenue(months))) db[code] = { ...db[code], ...m };
+  fs.mkdirSync('.state', { recursive: true });
+  fs.writeFileSync(REV, JSON.stringify(db));
+  return db;
+}
+
 (async () => {
-  const uni = await universeAll();
+  const [uni, rev] = await Promise.all([universeAll(), loadRevenue()]);
   let done = 0;
   const data = (await S.pool(uni, 6, async u => {
     if (++done % 200 === 0) console.log(`讀取中 ${done} / ${uni.length}`);
@@ -27,7 +43,8 @@ const clean = st => ({ ...st, payoff: Number.isFinite(st.payoff) ? st.payoff : n
     const last20 = d.b.slice(-20);
     d.liq = last20.reduce((s, x) => s + x.val, 0) / last20.length;
     d.ok = d.liq >= R.MIN_LIQ;
-    d.r = R.run(d.b);
+    d.r = R.run(d.b, rev[d.code] || {}); // 沒有營收資料的不會進場
+    d.f = R.features(rev[d.code], Date.now());
     d.r.own = S.stats(d.r.trades);
   }
   // 進場時成交量不足的已在規則裡排除，所以全部股票的交易一起驗證
@@ -44,6 +61,7 @@ const clean = st => ({ ...st, payoff: Number.isFinite(st.payoff) ? st.payoff : n
     const o = { code: d.code, name: d.name, mkt: d.mkt, close: price(b.at(-1).raw), lastT: b.at(-1).t, state: r.state, liq: Math.round(d.liq / 1e4),
       own: { n: r.own.n, win: r3(r.own.win), avg: r3(r.own.avg), worst: r3(r.own.worst), payoff: Number.isFinite(r.own.payoff) ? r3(r.own.payoff) : null } };
     if (!d.ok) o.illiquid = true;
+    if (d.f) o.rev = [d.f.ym, d.f.yoy1, d.f.high12 ? 1 : 0]; // 最新已公布月營收：月份、年增 %、是否創 12 個月新高
     // 還原權息價與實際價只在過去不同；最新一根相同，所以進場、止損、50 日均線直接用
     if (p) {
       const entryT = p.in < b.length ? b[p.in].t : addWeekdays(b.at(-1).t, 1);
@@ -86,6 +104,8 @@ const clean = st => ({ ...st, payoff: Number.isFinite(st.payoff) ? st.payoff : n
       `參考進場 ${s.pos.px}（今天收盤），明天開盤附近買進`,
       `止損 ${s.pos.stop}（${pct(s.pos.stop / s.pos.px - 1)}），盤中碰到就出場`,
       `沒有固定止盈：收盤跌破 50 日均線（目前 ${s.pos.ma}）就出場`,
+      `營收：${s.rev ? `${s.rev[0]} 月營收年增 ${s.rev[1] == null ? '—' : pct(s.rev[1] / 100)}，創 12 個月新高` : '—'}`,
+      `新聞：https://tw.stock.yahoo.com/quote/${s.code}.${s.mkt}/news`,
       `預計持有：通常 ${hold.med} 個交易日，最晚約 ${day(s.pos.deadline)} 收盤出場`,
       `本股歷史 ${s.own.n} 筆，勝率 ${(s.own.win * 100).toFixed(0)}%，平均每筆 ${pct(s.own.avg)}`].join('\n')),
     ...exits.map(s => `${name(s)}　做多部位（進場 ${s.closed.px}）\n` + WHY[s.closed.why](s)),

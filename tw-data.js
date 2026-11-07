@@ -49,6 +49,35 @@ async function bars(code, mkt = 'TW') {
   }
 }
 
+// 月營收：公開資訊觀測站每月彙總表（上市 sii＋上櫃 otc；_0＝國內公司、_1＝外國公司 KY）。months＝['YYYY-MM', …]
+// 回傳 { 代號: { 'YYYY-MM': [當月營收（千元）, 去年同月增減 %] } }；還沒公布的月份頁面不存在，略過
+async function revenue(months) {
+  const dec = new TextDecoder('big5');
+  const num = s => { const v = +s.replace(/[,\s]/g, ''); return s.trim() && Number.isFinite(v) ? v : null; };
+  const db = {}, jobs = months.flatMap(ym => ['sii', 'otc'].flatMap(mkt => [0, 1].map(k => [ym, mkt, k])));
+  const one = async ([ym, mkt, kind]) => {
+    const [y, m] = ym.split('-').map(Number);
+    const url = `https://mopsov.twse.com.tw/nas/t21/${mkt}/t21sc03_${y - 1911}_${m}_${kind}.html`;
+    let html = null;
+    for (let a = 0; a < 4 && html == null; a++) {
+      const r = await fetch(url, { headers: { 'User-Agent': 'Mozilla/5.0' } }).catch(() => null);
+      if (r && r.ok) html = dec.decode(await r.arrayBuffer());
+      else if (r && r.status === 404) html = '';
+      else await new Promise(z => setTimeout(z, 3000 * (a + 1)));
+    }
+    if (html == null) throw new Error(`讀不到月營收：${url}`);
+    // 欄位：當月營收、上月營收、去年當月營收、上月比較%、去年同月%、累計…（<td> 有大小寫混用）
+    for (const k of html.matchAll(/<tr align=right><td align=center>\s*(\d{4})\s*<\/td><td align=left>[^<]*<\/td>((?:<td[^>]*>[^<]*<\/td>){9})/gi)) {
+      const c = [...k[2].matchAll(/<td[^>]*>([^<]*)<\/td>/gi)].map(x => x[1]);
+      (db[k[1]] ||= {})[ym] = [num(c[0]), num(c[4])];
+    }
+  };
+  // 同時抓 4 頁
+  let i = 0;
+  await Promise.all([0, 1, 2, 3].map(async () => { while (i < jobs.length) await one(jobs[i++]); }));
+  return db;
+}
+
 // 往後數 n 個交易日（只跳過週末，沒扣國定假日，所以是「約」）
 function addWeekdays(t, n) {
   let x = t;
@@ -56,4 +85,4 @@ function addWeekdays(t, n) {
   return x;
 }
 
-module.exports = { TW_COST, ADJ, universe, universeAll, bars, addWeekdays };
+module.exports = { TW_COST, ADJ, universe, universeAll, bars, revenue, addWeekdays };

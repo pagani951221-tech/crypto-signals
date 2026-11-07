@@ -19,18 +19,29 @@ concurrency:
 jobs:
   scan:
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 25 # 沒有月營收快取時要從 2015 年抓起，多花幾分鐘
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
           node-version: 22
+      - name: 讀取月營收快取
+        uses: actions/cache/restore@v4
+        with:
+          path: .state/tw-rev.json
+          key: twrev-${{ github.run_id }}
+          restore-keys: twrev-
       - name: 計算台股訊號並通知
         run: node tw-scan.js
         env:
           TEST: ${{ inputs.test }}
           TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
           TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+      - name: 儲存月營收快取
+        uses: actions/cache/save@v4
+        with:
+          path: .state/tw-rev.json
+          key: twrev-${{ github.run_id }}
       - name: 提交 tw.json
         run: |
           git diff --quiet tw.json && exit 0

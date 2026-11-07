@@ -1,11 +1,26 @@
 // 台股專用規則（研究八選出）：收盤創 52 週新高、且當天成交金額是近 20 天平均的 2 倍以上，隔天開盤買進。
 // 出場：盤中碰到止損（進場價 − 3 ATR）、收盤跌破 50 日均線、或持有滿 60 個交易日。
 // 進場當下近 20 天平均每天成交要 ≥ 1,000 萬元，太小的股票價差與滑價會吃掉利潤。
+// 營收濾網（研究九）：當下已公布的最新月營收要創 12 個月新高。M 月營收最晚 M+1 月 10 日公布，11 日起才算數。
 const S = require('./strategy.js');
 const { TW_COST } = require('./tw-data.js');
 
 const MIN_LIQ = 1e7, HOLD = 60, SL = 3, WARM = 250;
-const NAME = '收盤創 52 週新高 ＋ 成交金額放大到近 20 天平均的 2 倍以上';
+const NAME = '收盤創 52 週新高 ＋ 成交金額放大到近 20 天平均的 2 倍以上 ＋ 最新月營收創 12 個月新高';
+
+const ymAdd = (ym, k) => { const [y, m] = ym.split('-').map(Number); return new Date(Date.UTC(y, m - 1 + k, 1)).toISOString().slice(0, 7); };
+// 日期 t（台灣時間）當下已公布的最新營收月份
+const latestYm = t => { const d = new Date(t + 8 * 36e5); return ymAdd(d.toISOString().slice(0, 7), d.getUTCDate() >= 11 ? -1 : -2); };
+// rev＝這檔股票的 { 'YYYY-MM': [營收, 年增%] }；沒資料回傳 null
+function features(rev, t) {
+  if (!rev) return null;
+  const ym = latestYm(t), cur = rev[ym];
+  if (!cur || !(cur[0] > 0)) return null;
+  const sum = (k0, n) => { let s = 0; for (let k = 0; k < n; k++) { const v = rev[ymAdd(ym, k0 - k)]; if (!v || v[0] == null) return null; s += v[0]; } return s; };
+  const a = sum(0, 3), b = sum(-12, 3);
+  const prev = Array.from({ length: 11 }, (_, k) => rev[ymAdd(ym, -1 - k)]?.[0]);
+  return { ym, rev: cur[0], yoy1: cur[1], yoy3: a && b > 0 ? (a / b - 1) * 100 : null, high12: prev.every(v => v != null) && cur[0] >= Math.max(...prev) };
+}
 
 function prep(b) {
   const x = S.indicators(b);
@@ -16,7 +31,8 @@ function prep(b) {
 }
 
 // 和 strategy.js 的 backtest 同樣的格式：trades、state（wait／enter／hold）、pos
-function run(b) {
+// rev 不傳（undefined）＝不用營收濾網，研究對照用；傳了但沒資料＝不進場
+function run(b, rev) {
   const x = prep(b), trades = [], last = b.length - 1;
   const open = (i, px) => ({ in: i + 1, px, stop: px - SL * x.atr[i], target: null });
   let p = null, state = 'wait';
@@ -31,7 +47,7 @@ function run(b) {
       }
     }
     // 創新高要是「剛成立」：前一天不能也是訊號
-    if (!p && x.entry[i] && !x.entry[i - 1] && x.liq[i] >= MIN_LIQ) {
+    if (!p && x.entry[i] && !x.entry[i - 1] && x.liq[i] >= MIN_LIQ && (rev === undefined || features(rev, b[i].t)?.high12)) {
       if (i === last) { state = 'enter'; p = open(i, b[i].c); }
       else p = open(i, b[i + 1].o);
     }
@@ -48,7 +64,7 @@ function holdStats(trades) {
     timeShare: trades.length ? by('time').length / trades.length : 0 };
 }
 
-module.exports = { MIN_LIQ, HOLD, SL, NAME, run, holdStats };
+module.exports = { MIN_LIQ, HOLD, SL, NAME, run, holdStats, features, latestYm, ymAdd };
 
 // node tw-rule.js：用一段假資料檢查進場、跌破 50 均線出場
 if (require.main === module) {
@@ -63,5 +79,14 @@ if (require.main === module) {
   assert.strictEqual(r.trades[0].in, 301);
   assert.strictEqual(r.trades[0].why, 'ma');
   assert(r.trades[0].ret > 0);
+  // 營收：11 日起才用上個月；創 12 個月新高才進場
+  assert.strictEqual(latestYm(Date.UTC(2024, 2, 10, 12)), '2024-01');
+  assert.strictEqual(latestYm(Date.UTC(2024, 2, 11, 12)), '2024-02');
+  const t300 = b[300].t; // 1970-10-28 → 最新可用 1970-09
+  const ok = {}; for (let k = 0; k < 13; k++) ok[ymAdd('1970-09', -k)] = [k === 0 ? 200 : 100, 10];
+  assert.strictEqual(features(ok, t300).high12, true);
+  assert.strictEqual(run(b, ok).trades.length, 1);
+  assert.strictEqual(run(b, { ...ok, '1970-09': [50, -10] }).trades.length, 0);
+  assert.strictEqual(run(b, {}).trades.length, 0);
   console.log('tw-rule 自我檢查通過', r.trades[0]);
 }
