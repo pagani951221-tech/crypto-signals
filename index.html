@@ -2,130 +2,352 @@
 <html lang="zh-Hant">
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="color-scheme" content="light">
 <title>加密貨幣操作建議</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@400;500;700;900&display=swap" rel="stylesheet">
 <style>
-  :root { color-scheme: light dark; --line: light-dark(#d9dce1, #3a3f47); --dim: light-dark(#5b6370, #a3abb8); --ok: light-dark(#15803d, #4ade80); --bad: light-dark(#b91c1c, #f87171); }
-  body { font: 16px/1.6 system-ui, "Microsoft JhengHei", sans-serif; max-width: 980px; margin: 0 auto; padding: 24px 16px 48px; }
-  h1 { font-size: 1.5rem; margin: 0 0 4px; }
-  h2 { font-size: 1.1rem; margin: 24px 0 8px; }
-  h3 { font-size: 1rem; margin: 16px 0 4px; }
-  .dim, .why small { color: var(--dim); font-size: .875rem; }
-  form { display: flex; gap: 8px; align-items: end; margin: 16px 0 8px; flex-wrap: wrap; }
-  form > label { font-size: .875rem; flex: 0 1 8rem; }
-  form > label.wide { flex: 1 1 300px; }
-  form > label.check { flex: 1 1 100%; display: flex; gap: 8px; align-items: center; }
-  input:not([type=checkbox]), select { display: block; width: 100%; box-sizing: border-box; font: inherit; padding: 6px 8px; }
-  button { font: inherit; padding: 6px 16px; }
-  details { border: 1px solid var(--line); border-radius: 8px; margin: 8px 0; }
-  summary { display: grid; grid-template-columns: 5rem 6.5rem 6rem 1fr; gap: 12px; align-items: start; padding: 12px; cursor: pointer; }
-  .num, td, th { font-variant-numeric: tabular-nums; }
-  .badge { text-align: center; font-weight: 700; border-radius: 6px; padding: 2px 0; color: #fff; }
-  .long { background: #15803d; } .short { background: #b91c1c; } .hold { background: #1d4ed8; } .wait { background: #5b6370; }
-  .why p { margin: 0 0 8px; } .why p:last-child { margin: 0; }
-  .why small { display: block; }
-  .body { padding: 0 12px 12px; overflow-x: auto; }
+  :root {
+    --ground: #F4F8FB; --panel: #FFFFFF; --line: #D9E4EE; --line-strong: #B9CBDB;
+    --office: #174A7C; --office-deep: #0F365C; --office-tint: #E4EEF7;
+    --ink: #1B2430; --ink-2: #44546A; --ink-3: #5F6F82;
+    --long: #1F7A47; --long-tint: #E7F4EC; --short: #B42318; --short-tint: #FBE9E7;
+    --hold: #2563A8; --hold-tint: #E6EFFA; --warn: #A65E14; --warn-tint: #FDF1E3;
+    --radius: 10px; --ease: cubic-bezier(.16, 1, .3, 1);
+  }
+  * { box-sizing: border-box; }
+  html { background: var(--ground); scrollbar-color: var(--line-strong) var(--ground); }
+  body { margin: 0; color: var(--ink); background: var(--ground); font: 16px/1.6 "Noto Sans TC", "Microsoft JhengHei", system-ui, sans-serif; font-variant-numeric: tabular-nums; -webkit-font-smoothing: antialiased; }
+  ::selection { background: #C9DDF1; color: var(--ink); }
+  :focus-visible { outline: 3px solid #6FA3D6; outline-offset: 2px; border-radius: 8px; }
+  h1, h2, h3, p { margin: 0; }
+  h2, h3 { color: var(--ink); }
+  .wrap { max-width: 1280px; margin: 0 auto; padding: 0 32px; }
+
+  /* 預報台色帶 */
+  .band { background: var(--office); color: #fff; }
+  .band .wrap { display: flex; align-items: baseline; gap: 24px; padding-top: 18px; padding-bottom: 18px; flex-wrap: wrap; }
+  .band h1 { font-size: 22px; font-weight: 700; letter-spacing: .02em; }
+  .band .issue { color: #D3E2F1; font-size: 15px; }
+  .band .next { margin-left: auto; color: #D3E2F1; font-size: 14px; }
+
+  /* 設定列 */
+  .controls { background: var(--panel); border-bottom: 1px solid var(--line); }
+  .controls form { display: flex; flex-wrap: wrap; gap: 12px 16px; align-items: end; padding-top: 16px; padding-bottom: 16px; }
+  form label { display: grid; gap: 4px; font-size: 13px; color: var(--ink-2); font-weight: 500; }
+  form label.coins { flex: 1 1 320px; }
+  form label.num { width: 128px; }
+  input, select, button { font: inherit; color: var(--ink); }
+  input:not([type=checkbox]), select { height: 40px; padding: 0 12px; border: 1px solid var(--line-strong); border-radius: 8px; background: #fff; font-size: 15px; width: 100%; }
+  input:not([type=checkbox]):hover, select:hover { border-color: #8FA9C2; }
+  button { height: 40px; padding: 0 22px; border: 0; border-radius: 8px; background: var(--office); color: #fff; font-weight: 700; cursor: pointer; transition: background .2s var(--ease); }
+  button:hover { background: var(--office-deep); }
+  button:disabled { background: #8FA3B8; cursor: progress; }
+  .auto { display: flex; align-items: center; gap: 8px; font-size: 14px; color: var(--ink-2); flex-basis: 100%; }
+  .auto input { width: 18px; height: 18px; accent-color: var(--office); }
+
+  /* 今日預報 */
+  .today { padding: 36px 0 20px; }
+  #headline { color: var(--ink); font-size: clamp(26px, 3.2vw, 36px); font-weight: 900; line-height: 1.3; letter-spacing: -.01em; text-wrap: balance; }
+  #reason { margin-top: 8px; font-size: 17px; color: var(--ink-2); max-width: 70ch; }
+  #status { margin-top: 10px; font-size: 14px; color: var(--ink-3); }
+  .disclaim { margin-top: 4px; font-size: 13px; color: var(--ink-3); }
+
+  /* 各幣預報格 ＋ 詳細 */
+  .forecast { display: grid; grid-template-columns: minmax(0, 1fr) 400px; gap: 24px; align-items: start; }
+  .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 12px; }
+  .cell { all: unset; box-sizing: border-box; cursor: pointer; display: grid; gap: 2px; padding: 14px 16px 16px; min-height: 132px; background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius); transition: border-color .2s var(--ease), box-shadow .2s var(--ease); }
+  .cell:hover { border-color: var(--line-strong); box-shadow: 0 4px 14px rgba(23, 74, 124, .08); }
+  .cell:focus-visible { outline: 3px solid #6FA3D6; outline-offset: 2px; }
+  .cell .sym { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; font-weight: 700; font-size: 16px; }
+  .cell .px { font-weight: 400; font-size: 13px; color: var(--ink-3); }
+  .cell .word { font-size: 28px; font-weight: 900; line-height: 1.25; margin-top: 6px; color: var(--ink-2); }
+  .cell .one { font-size: 13px; color: var(--ink-3); line-height: 1.45; white-space: pre-line; }
+  .cell.long { background: var(--long-tint); border-color: #A9D3B9; } .cell.long .word { color: var(--long); }
+  .cell.short { background: var(--short-tint); border-color: #EBB4AD; } .cell.short .word { color: var(--short); }
+  .cell.hold { background: var(--hold-tint); border-color: #AFC8E6; } .cell.hold .word { color: var(--hold); }
+  .cell.err .word { font-size: 22px; color: var(--ink-3); }
+  .cell[aria-pressed=true] { border-color: var(--office); box-shadow: 0 0 0 1px var(--office), 0 6px 18px rgba(23, 74, 124, .12); }
+  @media (min-width: 1021px) { .grid { grid-template-columns: repeat(5, minmax(0, 1fr)); } }
+
+  .detail { position: sticky; top: 16px; background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius); padding: 22px 24px 24px; box-shadow: 0 8px 28px rgba(23, 74, 124, .07); }
+  .detail .head { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; }
+  .detail h3 { font-size: 24px; font-weight: 900; }
+  .detail .head .px { color: var(--ink-3); font-size: 15px; }
+  .badge { display: inline-block; margin-top: 8px; padding: 2px 12px; border-radius: 999px; font-size: 14px; font-weight: 700; background: #E9EEF3; color: var(--ink-2); }
+  .badge.long { background: var(--long); color: #fff; } .badge.short { background: var(--short); color: #fff; } .badge.hold { background: var(--hold); color: #fff; }
+  .detail .say { margin-top: 14px; display: grid; gap: 12px; font-size: 15px; }
+  .levels { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin-top: 4px; }
+  .levels div { background: var(--ground); border-radius: 8px; padding: 8px 10px; }
+  .levels dt { font-size: 12px; color: var(--ink-3); }
+  .levels dd { margin: 0; font-size: 17px; font-weight: 700; }
+  .levels dd small { display: block; font-size: 12px; font-weight: 400; color: var(--ink-3); }
+  .size { background: var(--office-tint); border-radius: 8px; padding: 10px 12px; }
+  .alert { background: var(--warn-tint); color: #6B3B08; border-radius: 8px; padding: 10px 12px; }
+  .meta { font-size: 13px; color: var(--ink-3); }
+  .detail h4 { margin: 20px 0 6px; font-size: 14px; color: var(--ink-2); }
+
+  table { border-collapse: collapse; width: 100%; font-size: 14px; }
+  .detail th, .detail td { padding: 7px 6px; }
+  th, td { padding: 7px 10px; text-align: right; border-bottom: 1px solid var(--line); white-space: nowrap; }
+  th { font-weight: 500; color: var(--ink-3); font-size: 13px; }
+  th:first-child, td:first-child { text-align: left; }
   .scroll { overflow-x: auto; }
-  table { border-collapse: collapse; width: 100%; font-size: .875rem; white-space: nowrap; }
-  th, td { text-align: right; padding: 4px 8px; border-top: 1px solid var(--line); }
-  th:nth-child(-n+2), td:nth-child(-n+2) { text-align: left; }
-  tr.sum td { font-weight: 700; }
-  .pass { color: var(--ok); font-weight: 700; } .fail { color: var(--bad); font-weight: 700; }
-  @media (max-width: 600px) { summary { grid-template-columns: 1fr 1fr 6rem; } .why { grid-column: 1 / -1; } }
+
+  /* 預報準確度 */
+  .accuracy { margin-top: 56px; padding-bottom: 8px; }
+  .accuracy > h2 { font-size: 26px; font-weight: 900; }
+  .accuracy > p { margin-top: 6px; color: var(--ink-2); max-width: 70ch; }
+  .exit { margin-top: 6px; color: var(--ink-2); font-size: 15px; }
+  .rule { margin-top: 24px; background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius); padding: 22px 24px; }
+  .rule .top { display: flex; flex-wrap: wrap; gap: 8px 16px; align-items: baseline; }
+  .rule h3 { font-size: 18px; font-weight: 700; }
+  .verdict { font-size: 14px; font-weight: 700; padding: 2px 12px; border-radius: 999px; }
+  .verdict.pass { background: var(--office); color: #fff; } .verdict.fail { background: #EDF0F3; color: var(--ink-2); }
+  .rule .alert { margin-top: 12px; }
+  .strip { display: grid; grid-template-columns: repeat(auto-fit, minmax(92px, 1fr)); gap: 6px; margin-top: 18px; }
+  .yr { border-radius: 8px; padding: 10px 10px 9px; min-height: 86px; display: grid; align-content: space-between; animation: rise .7s var(--ease) backwards; }
+  .yr b { font-size: 13px; font-weight: 500; }
+  .yr span { font-size: 19px; font-weight: 900; line-height: 1.2; }
+  .yr small { font-size: 12px; }
+  .yr.off { background: repeating-linear-gradient(135deg, #F1F4F7 0 7px, #E2E8EE 7px 9px); color: var(--ink-2); }
+  .yr.off span { font-weight: 500; }
+  .legend { display: flex; flex-wrap: wrap; gap: 6px 18px; margin-top: 10px; font-size: 13px; color: var(--ink-3); }
+  .legend i { display: inline-block; width: 22px; height: 12px; border-radius: 3px; vertical-align: -1px; margin-right: 6px; }
+  .keys { display: grid; grid-template-columns: repeat(8, minmax(0, 64px)); gap: 4px; flex-basis: 100%; }
+  .keys span { display: grid; gap: 3px; font-size: 12px; text-align: center; white-space: nowrap; }
+  .keys i { width: 100%; height: 10px; margin: 0; }
+  @media (max-width: 600px) { .keys { grid-template-columns: repeat(4, 1fr); } }
+  .sum { margin-top: 18px; }
+  .swipe { display: none; margin-top: 4px; font-size: 12px; color: var(--ink-3); }
+  .sum th[scope=row] { font-weight: 700; color: var(--ink); font-size: 14px; }
+  details.years { margin-top: 12px; }
+  details.years summary { cursor: pointer; color: var(--office); font-size: 14px; font-weight: 500; width: max-content; list-style: none; display: flex; align-items: center; gap: 8px; }
+  details.years summary::-webkit-details-marker { display: none; }
+  details.years summary::before { content: ''; width: 7px; height: 7px; border: solid var(--office); border-width: 0 2px 2px 0; transform: rotate(-45deg); transition: transform .25s var(--ease); }
+  details.years[open] summary::before { transform: rotate(45deg); }
+  details.years[open] summary { margin-bottom: 8px; }
+  @keyframes rise { from { transform: translateY(10px); opacity: .35; } }
+
+  /* 說明 */
+  .about { margin: 56px 0 64px; padding-top: 28px; border-top: 1px solid var(--line); display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 24px 48px; color: var(--ink-2); font-size: 15px; }
+  .about h2 { font-size: 19px; color: var(--ink); margin-bottom: 6px; }
+  .about dl { margin: 0; display: grid; gap: 8px; }
+  .about dt { font-weight: 700; color: var(--ink); }
+  .about dd { margin: 0; }
+
+  @media (max-width: 1020px) {
+    .forecast { grid-template-columns: minmax(0, 1fr); }
+    .detail { position: static; }
+  }
+  @media (max-width: 600px) {
+    .wrap { padding: 0 16px; }
+    .band .wrap { gap: 0 12px; padding-top: 12px; padding-bottom: 12px; }
+    .band h1 { flex-basis: 100%; }
+    .band .issue, .band .next { margin-left: 0; font-size: 13px; }
+    .sum th, .sum td { padding: 7px 6px; font-size: 13px; }
+    .swipe { display: block; }
+    form label.num { width: calc(50% - 8px); }
+    form button { flex: 1 1 100%; }
+    .grid { grid-template-columns: repeat(2, 1fr); }
+    .levels { grid-template-columns: 1fr 1fr; }
+    .detail, .rule { padding: 18px 16px; }
+    .sum th[scope=row] { white-space: normal; min-width: 7em; max-width: 9em; }
+  }
+  @media (prefers-reduced-motion: reduce) { * { animation: none !important; transition: none !important; } }
 </style>
 
-<h1>加密貨幣操作建議</h1>
-<p class="dim">只用一條經過研究挑出的規則：<b>站上 200 均線 ＋ MACD 在訊號線上 ＋ 突破前 20 根高點</b>時做多，止損 3 ATR（ATR＝最近 14 根 K 線的平均波動），止盈＝止損 × 你設定的盈虧比（預設 2 倍，最低 1.5 倍），20 根 K 線內都沒碰到就出場。因為有到期出場和交易成本，實際盈虧比會比設定值低一些，驗證表格裡的「盈虧比」是實際值。放空版（三個條件反過來）一起測，當作對照。每次打開頁面都會在 10 個主流幣上做<b>逐年滾動驗證</b>：每年 1 月 1 日只看當時已經結束的交易，合併結果明顯賺錢（至少 50 筆、t 值 ≥ 2）才允許那一年交易；只有允許年份的成績也賺錢（t 值 ≥ 1），而且到現在為止仍然允許，才會給出訊號。個別幣自己歷史上虧錢的也跳過。成本含單邊手續費 0.1%、滑價 0.05%，放空另計 Binance 永續合約的真實資金費率（合約上市前以每 8 小時扣 0.01% 估計）。歷史勝率不保證未來獲利，這不是投資顧問意見。</p>
+<header class="band">
+  <div class="wrap">
+    <h1>加密貨幣操作建議</h1>
+    <span class="issue" id="issue">讀取中…</span>
+    <span class="next" id="next"></span>
+  </div>
+</header>
 
-<form id="f">
-  <label class="wide">幣種（Binance 代號，逗號分隔，以 USDT 計價）<input id="syms" autocomplete="off"></label>
-  <label>週期<select id="tf"></select></label>
-  <label>本金（USDT）<input id="cap" type="number" min="0" step="any" inputmode="decimal" placeholder="例如 1000"></label>
-  <label>每筆風險 %<input id="risk" type="number" min="0.1" max="10" step="0.1" value="1"></label>
-  <label>盈虧比（倍）<input id="rr" type="number" min="1.5" max="5" step="0.1" value="2"></label>
-  <button>更新</button>
-  <label class="check"><input id="auto" type="checkbox">每根 K 線收盤後自動更新，有新的進場訊號時跳出通知（頁面需保持開啟）</label>
-</form>
-<p id="status" class="dim" role="status"></p>
+<div class="controls">
+  <form id="f" class="wrap">
+    <label class="coins">幣種（Binance 代號，逗號分隔，以 USDT 計價）<input id="syms" autocomplete="off" spellcheck="false"></label>
+    <label class="num">週期<select id="tf"></select></label>
+    <label class="num">本金（USDT）<input id="cap" type="number" min="0" step="any" inputmode="decimal" placeholder="例如 1000"></label>
+    <label class="num">每筆風險 %<input id="risk" type="number" min="0.1" max="10" step="0.1" value="1"></label>
+    <label class="num">盈虧比（倍）<input id="rr" type="number" min="1.5" max="5" step="0.1" value="2"></label>
+    <button id="go">更新</button>
+    <label class="auto"><input id="auto" type="checkbox">每根 K 線收盤後自動更新，有新的進場訊號時跳出通知（頁面需保持開啟）</label>
+  </form>
+</div>
 
-<h2>規則驗證（10 個主流幣合併，逐年滾動）</h2>
-<div id="val"></div>
-<p class="dim">盈虧比＝平均每筆獲利 ÷ 平均每筆虧損。兩平勝率＝在這個盈虧比下不賺不賠需要的勝率，實際勝率要高於它才有賺。t 值約 2 以上才不太像運氣。「允許」只用當年 1 月 1 日以前已結束的交易決定，不偷看當年結果。研究腳本另外測過「每年用之前資料從 630 種規則重新挑一次」：日線 2020～2026 年合計平均每筆 +2.6%（t 值 3.8），4 小時是虧的。</p>
+<main class="wrap">
+  <section class="today" aria-live="polite">
+    <h2 id="headline">讀取行情中…</h2>
+    <p id="reason"></p>
+    <p id="status"></p>
+    <p class="disclaim">歷史回測不保證未來獲利，這不是投資建議。</p>
+  </section>
 
-<h2>各幣建議</h2>
-<div id="out"></div>
+  <section class="forecast" aria-label="各幣預報">
+    <div class="grid" id="grid"></div>
+    <aside class="detail" id="detail" aria-live="polite"><p class="meta">讀取中，完成後點一個幣看詳細建議。</p></aside>
+  </section>
+
+  <section class="accuracy" aria-labelledby="acc-h">
+    <h2 id="acc-h">預報準確度</h2>
+    <p>每次打開都在 10 個主流幣上重新做逐年滾動驗證：每年 1 月 1 日只看當時已經結束的交易，合併結果明顯賺錢（至少 50 筆、t 值 ≥ 2）才允許那一年交易；允許年份的成績也要賺錢（t 值 ≥ 1），而且到現在仍然允許，才會給出訊號。</p>
+    <p class="exit" id="exit"></p>
+    <div id="val"></div>
+  </section>
+
+  <section class="about">
+    <div>
+      <h2>這個預報怎麼來的</h2>
+      <p>只用一條經過研究挑出的規則：站上 200 均線 ＋ MACD 在訊號線上 ＋ 突破前 20 根高點時做多；止損 3 ATR（最近 14 根 K 線的平均波動），止盈＝止損 × 你設定的盈虧比（預設 2 倍，最低 1.5 倍），20 根 K 線內都沒碰到就出場。放空版（三個條件反過來）一起測，當作對照。個別幣自己歷史上虧錢的也跳過。</p>
+      <p style="margin-top:8px">成本含單邊手續費 0.1%、滑價 0.05%，放空另計 Binance 永續合約的真實資金費率（合約上市前以每 8 小時扣 0.01% 估計）。因為有到期出場和交易成本，實際盈虧比會比設定值低一些。</p>
+    </div>
+    <div>
+      <h2>名詞</h2>
+      <dl>
+        <dt>實際盈虧比</dt><dd>平均每筆獲利 ÷ 平均每筆虧損。</dd>
+        <dt>兩平勝率</dt><dd>在這個盈虧比下不賺不賠需要的勝率，實際勝率要高於它才有賺。</dd>
+        <dt>t 值</dt><dd>平均報酬相對於波動有多穩，約 2 以上才不太像運氣。</dd>
+      </dl>
+      <p style="margin-top:12px">歷史勝率不保證未來獲利，這不是投資顧問意見。放空需使用合約並承擔槓桿與強制平倉風險。</p>
+    </div>
+  </section>
+</main>
 
 <!-- 改 strategy.js 時把 v 加 1，瀏覽器才會抓新版而不是用快取 -->
 <script src="strategy.js?v=6"></script>
 <script>
   const $ = id => document.getElementById(id);
-  const pct = v => (v >= 0 ? '+' : '') + (v * 100).toFixed(1) + '%';
+  const pct = v => (v >= 0 ? '+' : '−') + Math.abs(v * 100).toFixed(1) + '%';
   const pct0 = v => (v * 100).toFixed(0) + '%';
   const price = v => v.toLocaleString('en-US', { maximumSignificantDigits: 6 });
   const when = t => new Date(t).toLocaleString('zh-TW', { month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit' });
   const esc = s => String(s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
   const SIDE = d => d > 0 ? '做多' : '放空';
-  const cells = st => st.n ? `<td>${st.n}</td><td>${pct0(st.win)}</td><td>${isFinite(st.payoff) ? st.payoff.toFixed(2) : '—'}</td><td>${pct0(st.be)}</td><td>${pct(st.avg)}</td><td>${st.t.toFixed(1)}</td>`
-    : '<td>0</td><td>—</td><td>—</td><td>—</td><td>—</td><td>—</td>';
-  const HEAD = '<th>筆數</th><th>勝率</th><th>盈虧比</th><th>兩平勝率</th><th>平均每筆</th><th>t 值</th>';
   const FRESH = { stop: '已碰到止損位，訊號作廢', target: '已到止盈位，這段行情已走完', late: '已走完一半以上的止盈距離，追進去盈虧比太差' };
-  let items = [], val = {}, seen = null, timer;
+  const statCells = st => st.n
+    ? `<td>${pct(st.avg)}</td><td>${pct0(st.win)}</td><td>${isFinite(st.payoff) ? st.payoff.toFixed(2) : '—'}</td><td>${pct0(st.be)}</td><td>${st.t.toFixed(1)}</td><td>${st.n}</td>`
+    : '<td>—</td><td>—</td><td>—</td><td>—</td><td>—</td><td>0</td>';
+  const STAT_HEAD = '<th>平均每筆</th><th>勝率</th><th>實際盈虧比</th><th>兩平勝率</th><th>t 值</th><th>筆數</th>';
+  let items = [], val = {}, seen = null, timer, selected = null;
 
   function sizeText(live, p, d) {
     const cap = +$('cap').value, risk = +$('risk').value / 100;
-    if (!(cap > 0 && risk > 0)) return '在上方填入本金，就會算出建議倉位。';
+    if (!(cap > 0 && risk > 0)) return '<p class="size">在上方填入本金，就會算出建議倉位。</p>';
     const z = sizing(cap, risk, live, p.stop);
     const lev = d < 0 || z.lev > 1 ? `，合約約需 ${Math.max(1, Math.ceil(z.lev))} 倍槓桿` : '';
-    return `<b>建議倉位：${price(z.qty)} 枚（約 ${price(z.value)} USDT）</b>，打到止損約虧 ${price(z.loss)} USDT（本金的 ${risk * 100}%）${lev}。`;
+    const usdt = v => v.toLocaleString('en-US', { maximumFractionDigits: 2 });
+    return `<p class="size"><b>建議倉位：${z.qty.toLocaleString('en-US', { maximumSignificantDigits: 4 })} 枚（約 ${usdt(z.value)} USDT）</b><br>打到止損約虧 ${usdt(z.loss)} USDT（本金的 ${risk * 100}%）${lev}。</p>`;
   }
 
-  // 一個方向的說明；pri 越高越優先決定標籤
+  const levels = p => `<dl class="levels">
+      <div><dt>進場</dt><dd>${price(p.px)}</dd></div>
+      <div><dt>止損</dt><dd>${price(p.stop)}<small>${pct(p.stop / p.px - 1)}</small></dd></div>
+      <div><dt>止盈</dt><dd>${price(p.target)}<small>${pct(p.target / p.px - 1)}</small></dd></div></dl>`;
+
+  // 一個方向的判斷：pri 越高越優先決定這個幣的標籤；one＝格子裡的一行字，text＝詳細面板內容
   function lineFor(r, item) {
     const { bars, live } = item, d = r.dir, p = r.pos, s = SIDE(d), o = r.own;
-    const stat = `<small>本幣歷史：${o.n} 筆，勝率 ${pct0(o.win)}、盈虧比 ${o.n ? o.payoff.toFixed(2) : '—'}、平均每筆 ${pct(o.avg)}、最大單筆虧損 ${pct(o.worst)}</small>`;
-    if (d < 0 && !item.perp) return { pri: 0, k: 'wait', label: '觀望', text: '此幣在 Binance 沒有 USDT 永續合約，無法放空。' };
-    if (!coinOk(o)) return { pri: 0, k: 'wait', label: '觀望', text: `這條${s}規則在此幣歷史上是虧的，跳過。${stat}` };
-    if (r.state === 'wait') return { pri: 0, k: 'wait', label: '觀望', text: `尚未出現${s}訊號。${stat}` };
-    const lv = `止損 ${price(p.stop)}（${pct(p.stop / p.px - 1)}）、止盈 ${price(p.target)}（${pct(p.target / p.px - 1)}）`;
+    const wait = (one, text) => ({ pri: 0, k: 'wait', label: '觀望', one, text });
+    if (d < 0 && !item.perp) return wait('無合約，不能放空', '<p>此幣在 Binance 沒有 USDT 永續合約，無法放空。</p>');
+    if (!coinOk(o)) return wait('本幣歷史虧損，跳過', `<p>這條${s}規則在此幣歷史上是虧的，跳過。</p>`);
+    if (r.state === 'wait') return wait('尚無訊號', `<p>尚未出現${s}訊號。訊號只在 K 線收盤後變動。</p>`);
     const f = freshness(p, d, live);
     if (r.state === 'enter') {
-      const head = `最新 K 線收盤出現${s}訊號：參考進場 ${price(p.px)}，${lv}，${MAX_HOLD} 根 K 線內兩邊都沒碰到就市價出場。`;
-      if (f !== 'ok') return { pri: 1, k: 'wait', label: '觀望', text: `${head}<b>但即時價 ${price(live)} ${FRESH[f]}，不建議進場。</b>${stat}` };
-      return { pri: 3, k: d > 0 ? 'long' : 'short', label: s, text: head + sizeText(live, p, d) + stat,
+      const head = `<p>最新 K 線收盤出現${s}訊號，${MAX_HOLD} 根 K 線內兩邊都沒碰到就市價出場。</p>${levels(p)}`;
+      if (f !== 'ok') return { pri: 1, k: 'wait', label: '觀望', one: '訊號已過時，不追', text: `${head}<p class="alert">即時價 ${price(live)} ${FRESH[f]}，不建議進場。</p>` };
+      return { pri: 3, k: d > 0 ? 'long' : 'short', label: s, one: `止損 ${price(p.stop)}
+止盈 ${price(p.target)}`, text: head + sizeText(live, p, d),
         alert: { key: `${d}|${bars.at(-1).t}`, body: `${s}　進場約 ${price(live)}　止損 ${price(p.stop)}　止盈 ${price(p.target)}` } };
     }
-    const now = `規則已在 ${when(bars[p.in].t)} 以 ${price(p.px)} ${s}，${lv}，即時價 ${price(live)}（${pct(d * (live / p.px - 1))}）。`;
-    if (f === 'stop' || f === 'target') return { pri: 1, k: 'wait', label: '觀望', text: `${now}即時價已到${f === 'stop' ? '止損' : '止盈'}位，這筆應已出場，等下一次訊號。${stat}` };
-    return { pri: 2, k: 'hold', label: d > 0 ? '持有多單' : '持有空單', text: `${now}已進場者照這組止損止盈續抱；未進場者不追價，等下一次訊號。${stat}` };
+    const now = `<p>規則已在 ${when(bars[p.in].t)} ${s}，即時價 ${price(live)}（${pct(d * (live / p.px - 1))}）。</p>${levels(p)}`;
+    if (f === 'stop' || f === 'target') return { pri: 1, k: 'wait', label: '觀望', one: `已到${f === 'stop' ? '止損' : '止盈'}位`, text: `${now}<p class="alert">即時價已到${f === 'stop' ? '止損' : '止盈'}位，這筆應已出場，等下一次訊號。</p>` };
+    return { pri: 2, k: 'hold', label: d > 0 ? '持有多單' : '持有空單', one: `${pct(d * (live / p.px - 1))} 持有中`, text: `${now}<p>已進場者照這組止損止盈續抱；未進場者不追價，等下一次訊號。</p>` };
   }
 
-  function card(item) {
-    const { sym, runs, live, err } = item;
-    if (err) return { html: `<details><summary><b>${sym}</b><span></span><span class="badge wait">無資料</span><span class="why">${esc(err)}</span></summary></details>` };
-    const lines = runs.filter(r => val[r.dir].pass).map(r => lineFor(r, item));
-    const top = lines.reduce((m, l) => l.pri > m.pri ? l : m, { pri: -1, k: 'wait', label: '觀望' });
-    const why = lines.length ? lines.map(l => `<p>${l.text}</p>`).join('') : '這個週期的規則沒有通過滾動驗證，不建議依技術訊號操作。';
-    const rows = runs.map(r => `<tr><td>${SIDE(r.dir)}</td><td>${r.name}</td>${cells(r.own)}<td>${r.own.n ? pct(r.own.worst) : '—'}</td></tr>`).join('');
-    const tf = $('tf').value;
-    return {
-      alerts: lines.filter(l => l.alert).map(l => ({ key: `${sym}|${tf}|${l.alert.key}`, title: `${sym} ${TF[tf].label}`, body: l.alert.body })),
-      html: `<details><summary><b>${sym}</b><span class="num">${price(live)}</span>
-      <span class="badge ${top.k}">${top.label}</span><span class="why">${why}</span></summary>
-      <div class="body"><table><tr><th>方向</th><th>規則</th>${HEAD}<th>最大單筆虧損</th></tr>${rows}</table>
-      <p class="dim">這個幣全部歷史的回測。${item.perp ? '' : '此幣沒有永續合約，放空回測用固定資金費率估計。'}</p></div></details>` };
+  // 一個幣的總判斷：取所有已通過方向中優先度最高的
+  function judge(item) {
+    if (item.err) return { k: 'err', label: '無資料', one: item.err, lines: [] };
+    const lines = item.runs.filter(r => val[r.dir].pass).map(r => lineFor(r, item));
+    if (!lines.length) return { k: 'wait', label: '觀望', one: '規則未通過驗證', lines, pri: -1 };
+    const top = lines.reduce((m, l) => l.pri > m.pri ? l : m);
+    return { ...top, lines };
   }
+
+  function renderGrid(shown) {
+    $('grid').innerHTML = shown.map(({ item, j }) => `<button type="button" class="cell ${j.k}" data-sym="${item.sym}" aria-pressed="${item.sym === selected}">
+      <span class="sym">${item.sym}<span class="px">${item.live ? price(item.live) : ''}</span></span>
+      <span class="word">${j.label}</span><span class="one">${esc(j.one)}</span></button>`).join('');
+  }
+
+  function renderDetail(shown) {
+    const hit = shown.find(s => s.item.sym === selected);
+    if (!hit) { $('detail').innerHTML = '<p class="meta">點一個幣看詳細建議。</p>'; return; }
+    const { item, j } = hit;
+    if (item.err) { $('detail').innerHTML = `<div class="head"><h3>${item.sym}</h3></div><span class="badge">無資料</span><div class="say"><p>${esc(item.err)}</p></div>`; return; }
+    const body = j.lines.length ? j.lines.map(l => l.text).join('') : '<p>這個週期的規則沒有通過滾動驗證，不建議依技術訊號操作。</p>';
+    const o = st => st.n ? `<td>${pct(st.avg)}</td><td>${pct0(st.win)}</td><td>${isFinite(st.payoff) ? st.payoff.toFixed(2) : '—'}</td><td>${pct(st.worst)}</td><td>${st.n}</td>` : '<td>—</td><td>—</td><td>—</td><td>—</td><td>0</td>';
+    const rows = item.runs.map(r => `<tr><td>${SIDE(r.dir)}</td>${o(r.own)}</tr>`).join('');
+    $('detail').innerHTML = `<div class="head"><h3>${item.sym}</h3><span class="px">即時價 ${price(item.live)}</span></div>
+      <span class="badge ${j.k}">${j.label}</span>
+      <div class="say">${body}</div>
+      <h4>這個幣全部歷史的回測</h4>
+      <div class="scroll"><table><tr><th>方向</th><th>平均每筆</th><th>勝率</th><th>盈虧比</th><th>最差一筆</th><th>筆數</th></tr>${rows}</table></div>
+      ${item.perp ? '' : '<p class="meta" style="margin-top:8px">此幣沒有永續合約，放空回測用固定資金費率估計。</p>'}`;
+  }
+
+  function renderHeadline(shown) {
+    const tf = $('tf').value, passed = [1, -1].filter(d => val[d].pass);
+    if (!shown.length) { $('headline').textContent = '沒有取得任何資料'; $('reason').textContent = '請確認幣種代號或網路連線後再按更新。'; return; }
+    if (!passed.length) {
+      $('headline').textContent = `今日行動預報：${TF[tf].label}不建議操作`;
+      $('reason').textContent = `${TF[tf].label}的規則沒有通過逐年滾動驗證，照技術訊號買賣在歷史上是虧的，所有幣都建議觀望。` + (tf !== '1d' ? '要看有效的預報，請把週期切換到日線。' : '');
+      return;
+    }
+    const act = shown.filter(s => s.j.pri === 3), hold = shown.filter(s => s.j.pri === 2);
+    const parts = [...act.map(s => `${s.item.sym} 可${s.j.label}`), ...hold.map(s => `${s.item.sym} ${s.j.label}`)];
+    const rest = shown.length - act.length - hold.length;
+    $('headline').textContent = '今日行動預報：' + (parts.length ? parts.join('、') + (rest ? '，其餘觀望' : '') : '全部觀望');
+    $('reason').textContent = act.length ? '點有訊號的幣看進場、止損、止盈與建議倉位。' : hold.length ? '持有中的部位照原本的止損止盈處理；沒有新的進場訊號。' : `規則仍然有效，只是還沒有任何幣出現進場訊號。訊號只在每根 K 線收盤後變動。`;
+  }
+
+  // 像雨量圖的分級色帶：每級的字色都選過對比
+  const BANDS = [
+    { min: 0.10, bg: '#174A7C', fg: '#FFFFFF', label: '≥ +10%' }, { min: 0.05, bg: '#2F6699', fg: '#FFFFFF', label: '+5～10' },
+    { min: 0.02, bg: '#9DBEDD', fg: '#13324F', label: '+2～5' }, { min: 0, bg: '#DCEAF5', fg: '#1B2430', label: '0～2' },
+    { min: -0.02, bg: '#F8E0CC', fg: '#4A2507', label: '−2～0' }, { min: -0.05, bg: '#EDB48A', fg: '#3D1E05', label: '−5～−2' },
+    { min: -0.10, bg: '#A4501A', fg: '#FFFFFF', label: '−10～−5' }, { min: -Infinity, bg: '#7A3410', fg: '#FFFFFF', label: '≤ −10%' },
+  ];
+  const yearColor = st => BANDS.find(b => st.avg >= b.min);
 
   function renderVal(ex) {
-    const tf = $('tf').value;
-    $('val').innerHTML = `<p>出場設定：止損 ${ex.sl} ATR、止盈 ${+ex.tp.toFixed(2)} ATR（設定盈虧比 ${+(ex.tp / ex.sl).toFixed(2)} 倍）。</p>` + [1, -1].map(d => {
+    $('exit').textContent = `目前出場設定：止損 ${ex.sl} ATR、止盈 ${+ex.tp.toFixed(2)} ATR（設定盈虧比 ${+(ex.tp / ex.sl).toFixed(2)} 倍）。${TF[$('tf').value].label}，用 ${BASKET.join('、')} 合併計算。`;
+    $('val').innerHTML = [1, -1].map(d => {
       const v = val[d];
-      const warn = v.pass && v.recent.n >= 10 && v.recent.avg <= 0 ? `<p class="fail">注意：最近 12 個月這條規則是虧的（${v.recent.n} 筆，平均每筆 ${pct(v.recent.avg)}），長期統計仍通過，但近期效果轉弱。</p>` : '';
-      return `<h3>${SIDE(d)}：${esc(ruleName(RULE.ids, d))}　<span class="${v.pass ? 'pass' : 'fail'}">${v.pass ? '通過，會給訊號' : '未通過，不給訊號'}</span></h3>${warn}
-      <div class="scroll"><table><tr><th>年份</th><th>當年是否允許</th>${HEAD}</tr>
-      ${v.rows.map(r => `<tr><td>${r.y}</td><td>${r.on ? '允許' : '不允許'}</td>${cells(r.st)}</tr>`).join('')}
-      <tr class="sum"><td>滾動合計</td><td>只算允許的年份</td>${cells(v.wf)}</tr>
-      <tr><td>最近 12 個月</td><td></td>${cells(v.recent)}</tr>
-      <tr><td>全部歷史</td><td></td>${cells(v.total)}</tr></table></div>`;
-    }).join('') + `<p class="dim">${TF[tf].label}，用 ${BASKET.join('、')} 合併計算。年份依進場時間歸屬。</p>`;
+      const warn = v.pass && v.recent.n >= 10 && v.recent.avg <= 0
+        ? `<p class="alert"><b>近期轉弱：</b>最近 12 個月這條規則是虧的（${v.recent.n} 筆，平均每筆 ${pct(v.recent.avg)}）。長期統計仍通過，所以仍會給訊號。</p>` : '';
+      const strip = v.rows.map((r, i) => {
+        const c = yearColor(r.st), avg = r.st.n ? pct(r.st.avg) : '—';
+        return r.on
+          ? `<div class="yr" style="background:${c.bg};color:${c.fg};animation-delay:${i * 45}ms"><b>${r.y}</b><span>${avg}</span><small>${r.st.n} 筆 · 勝率 ${r.st.n ? pct0(r.st.win) : '—'}</small></div>`
+          : `<div class="yr off" style="animation-delay:${i * 45}ms"><b>${r.y}</b><span>${avg}</span><small>不允許交易</small></div>`;
+      }).join('');
+      const years = v.rows.map(r => `<tr><td>${r.y}</td><td>${r.on ? '允許' : '不允許'}</td>${statCells(r.st)}</tr>`).join('');
+      return `<article class="rule">
+        <div class="top"><h3>${SIDE(d)}規則：${esc(ruleName(RULE.ids, d))}</h3><span class="verdict ${v.pass ? 'pass' : 'fail'}">${v.pass ? '通過，會給訊號' : '未通過，不給訊號'}</span></div>
+        ${warn}
+        <div class="strip" role="list" aria-label="${SIDE(d)}規則逐年平均每筆報酬">${strip}</div>
+        <div class="legend"><span class="keys" role="list" aria-label="每年平均每筆的顏色分級">${[...BANDS].reverse().map(b => `<span role="listitem"><i style="background:${b.bg}"></i>${b.label}</span>`).join('')}</span><span><i style="background:repeating-linear-gradient(135deg,#F1F4F7 0 5px,#E2E8EE 5px 7px)"></i>斜線＝依之前資料不允許交易，數字只是假設有做的結果</span></div>
+        <div class="scroll sum"><table><tr><th></th>${STAT_HEAD}</tr>
+          <tr><th scope="row">滾動合計（只算允許的年份）</th>${statCells(v.wf)}</tr>
+          <tr><th scope="row">最近 12 個月</th>${statCells(v.recent)}</tr>
+          <tr><th scope="row">全部歷史</th>${statCells(v.total)}</tr></table></div>
+        <p class="swipe">表格可左右滑動。</p>
+        <details class="years"><summary>逐年完整數字</summary><div class="scroll"><table><tr><th>年份</th><th>當年</th>${STAT_HEAD}</tr>${years}</table></div></details>
+      </article>`;
+    }).join('');
   }
 
   async function one(sym, tf) {
@@ -137,7 +359,17 @@
     } catch (e) { return { sym, err: e.message }; }
   }
 
-  // 用已下載的資料、目前的盈虧比設定重算回測與驗證，回傳目前的進場訊號
+  // 畫出各幣預報與詳細，回傳目前可進場的通知
+  function render() {
+    const shown = items.filter(i => i.show).map(item => ({ item, j: judge(item) }));
+    if (!shown.some(s => s.item.sym === selected))
+      selected = (shown.find(s => s.j.pri === 3) || shown.find(s => s.j.pri === 2) || shown[0] || {}).item?.sym ?? null;
+    renderHeadline(shown); renderGrid(shown); renderDetail(shown);
+    const tf = $('tf').value;
+    return shown.flatMap(({ item, j }) => j.lines.filter(l => l.alert).map(l => ({ key: `${item.sym}|${tf}|${l.alert.key}`, title: `${item.sym} ${TF[tf].label}`, body: l.alert.body })));
+  }
+
+  // 用已下載的資料、目前的盈虧比設定重算回測與驗證
   function compute() {
     const rr = Math.max(MIN_RR, +$('rr').value || DEFAULT_RR), ex = exitFor(rr);
     if (+$('rr').value !== rr) $('rr').value = rr; // 低於 1.5 或空白時改回有效值
@@ -148,12 +380,6 @@
     return render();
   }
 
-  function render() {
-    const cards = items.filter(i => i.show).map(card);
-    $('out').innerHTML = cards.map(c => c.html).join('');
-    return cards.flatMap(c => c.alerts || []);
-  }
-
   function savePrefs() {
     try { localStorage.setItem('prefs', JSON.stringify({ syms: $('syms').value, tf: $('tf').value, cap: $('cap').value, risk: $('risk').value, rr: $('rr').value, auto: $('auto').checked })); } catch {}
   }
@@ -162,30 +388,32 @@
     const tf = $('tf').value;
     const syms = [...new Set($('syms').value.toUpperCase().split(/[\s,，]+/).filter(s => /^[A-Z0-9]{1,15}$/.test(s)))];
     savePrefs();
+    $('go').disabled = true;
     $('status').textContent = '讀取行情、資金費率並回測中…（第一次開啟要抓完整資金費率歷史，約需 10～20 秒）';
     items = await Promise.all([...new Set([...syms, ...BASKET])].map(s => one(s, tf)));
     items.forEach(i => i.show = syms.includes(i.sym));
     const alerts = compute();
-    const basket = items.filter(i => BASKET.includes(i.sym) && i.runs);
+    $('go').disabled = false;
     // 只在自動更新時通知「這次才新出現」的訊號；第一次載入或手動更新不通知
     if (fromTimer && seen && 'Notification' in window && Notification.permission === 'granted')
       for (const n of alerts.filter(n => !seen.has(n.key))) new Notification(n.title, { body: n.body, tag: n.key });
     seen = new Set(alerts.map(n => n.key));
     document.title = (alerts.length ? `(${alerts.length}) ` : '') + '加密貨幣操作建議';
     const T = Math.max(0, ...items.map(r => r.bars ? r.bars.at(-1).T : 0));
-    const missing = BASKET.length - basket.length;
-    $('status').textContent = (T ? `${TF[tf].label}，訊號依 ${new Date(T + 1).toLocaleString('zh-TW')} 收盤的 K 線計算，價格欄為即時價。點任一列可看該幣的回測數字。` : '沒有取得任何資料。')
-      + (missing ? ` 驗證用的幣有 ${missing} 個取不到資料，驗證結果只含其餘的幣。` : '');
+    const missing = BASKET.length - items.filter(i => BASKET.includes(i.sym) && i.runs).length;
+    $('issue').textContent = T ? `${TF[tf].label}預報 · 依 ${new Date(T + 1).toLocaleString('zh-TW', { month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit' })} 收盤發布` : '尚未取得資料';
+    $('status').textContent = '價格為即時價，點任一個幣可看詳細建議與回測。' + (missing ? ` 驗證用的幣有 ${missing} 個取不到資料，驗證結果只含其餘的幣。` : '');
     schedule();
   }
 
   function schedule() {
     clearTimeout(timer);
-    if (!$('auto').checked) return;
-    const ms = TF[$('tf').value].ms, next = Math.ceil(Date.now() / ms) * ms + 15e3; // 收盤後 15 秒，等交易所資料到齊
-    timer = setTimeout(() => run(true), next - Date.now());
-    const blocked = !('Notification' in window) ? '這個瀏覽器不支援通知，' : Notification.permission === 'denied' ? '通知已被瀏覽器封鎖，' : '';
-    $('status').textContent += ` ${blocked}下次自動更新：${new Date(next).toLocaleString('zh-TW')}。`;
+    const ms = TF[$('tf').value].ms, close = Math.ceil(Date.now() / ms) * ms;
+    const at = new Date(close).toLocaleString('zh-TW', { month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit' });
+    if (!$('auto').checked) { $('next').textContent = `下次發布 ${at}（收盤後按更新）`; return; }
+    timer = setTimeout(() => run(true), close + 15e3 - Date.now()); // 收盤後 15 秒，等交易所資料到齊
+    const blocked = !('Notification' in window) ? ' · 瀏覽器不支援通知' : Notification.permission === 'denied' ? ' · 通知已被封鎖' : '';
+    $('next').textContent = `下次發布 ${at} · 會自動更新${blocked}`;
   }
 
   $('tf').innerHTML = Object.entries(TF).map(([k, v]) => `<option value="${k}">${v.label}</option>`).join('');
@@ -199,10 +427,17 @@
   $('f').onsubmit = e => { e.preventDefault(); run(); };
   $('tf').onchange = () => run();
   $('cap').oninput = $('risk').oninput = () => { savePrefs(); render(); };
-  $('rr').onchange = () => { if (items.length) { seen = new Set(compute().map(n => n.key)); } savePrefs(); };
+  $('rr').onchange = () => { if (items.length) seen = new Set(compute().map(n => n.key)); savePrefs(); };
   $('auto').onchange = async () => {
     if ($('auto').checked && 'Notification' in window && Notification.permission === 'default') await Notification.requestPermission();
     savePrefs(); run();
+  };
+  $('grid').onclick = e => {
+    const b = e.target.closest('.cell');
+    if (!b) return;
+    selected = b.dataset.sym;
+    render();
+    if (matchMedia('(max-width: 1020px)').matches) $('detail').scrollIntoView({ behavior: 'smooth', block: 'start' });
   };
   run();
 </script>

@@ -1,1 +1,4 @@
 .claude/
+# 設計流程的工作檔（草圖、截圖、方向契約）不上線；只保留設計 token
+.impeccable/*
+!.impeccable/design.json

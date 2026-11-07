@@ -1,0 +1,178 @@
+{
+  "schemaVersion": 2,
+  "generatedAt": "2026-11-07T00:00:00Z",
+  "title": "Design System: 加密貨幣操作建議",
+  "extensions": {
+    "colorMeta": {
+      "office": { "role": "primary", "displayName": "Forecast-Office Blue", "canonical": "oklch(40.3% 0.100 251)", "tonalRamp": ["#050C14", "#11283F", "#1E4771", "#37699D", "#5A8DC4", "#8BB2DC", "#BCD4EE", "#E4F0FD"] },
+      "office-deep": { "role": "primary", "displayName": "Deep Office Blue" },
+      "office-tint": { "role": "primary", "displayName": "Office Mist" },
+      "office-on-text": { "role": "primary", "displayName": "Masthead Mist Text" },
+      "long": { "role": "secondary", "displayName": "Long Green", "canonical": "oklch(51.4% 0.116 153)", "tonalRamp": ["#040E07", "#062F18", "#00542B", "#1D7946", "#489D68", "#82BE95", "#B7DCC1", "#E2F4E7"] },
+      "long-tint": { "role": "secondary", "displayName": "Long Tint" },
+      "long-edge": { "role": "secondary", "displayName": "Long Edge" },
+      "short": { "role": "secondary", "displayName": "Short Red", "canonical": "oklch(50.0% 0.182 29)", "tonalRamp": ["#190503", "#4B0905", "#850703", "#B7271C", "#E25242", "#F88B7A", "#FFBDB2", "#FFE5E0"] },
+      "short-tint": { "role": "secondary", "displayName": "Short Tint" },
+      "short-edge": { "role": "secondary", "displayName": "Short Edge" },
+      "hold": { "role": "secondary", "displayName": "Holding Blue", "canonical": "oklch(49.6% 0.127 253)", "tonalRamp": ["#040C16", "#0B2746", "#11457D", "#2967AC", "#4E8CD4", "#83B1E9", "#B7D4F7", "#E2F0FF"] },
+      "hold-tint": { "role": "secondary", "displayName": "Hold Tint" },
+      "hold-edge": { "role": "secondary", "displayName": "Hold Edge" },
+      "warn": { "role": "secondary", "displayName": "Warning Amber", "canonical": "oklch(55.4% 0.123 59)", "tonalRamp": ["#130802", "#3D1D00", "#6C3300", "#985100", "#BF7532", "#DAA072", "#EDC9AD", "#FDEBDD"] },
+      "warn-tint": { "role": "secondary", "displayName": "Warning Tint" },
+      "warn-ink": { "role": "secondary", "displayName": "Warning Ink" },
+      "year-up-10": { "role": "tertiary", "displayName": "Year ≥ +10%", "tonalRamp": ["#7A3410", "#A4501A", "#EDB48A", "#F8E0CC", "#DCEAF5", "#9DBEDD", "#2F6699", "#174A7C"] },
+      "year-up-5": { "role": "tertiary", "displayName": "Year +5～10" },
+      "year-up-2": { "role": "tertiary", "displayName": "Year +2～5" },
+      "year-up-0": { "role": "tertiary", "displayName": "Year 0～2" },
+      "year-down-0": { "role": "tertiary", "displayName": "Year −2～0" },
+      "year-down-2": { "role": "tertiary", "displayName": "Year −5～−2" },
+      "year-down-5": { "role": "tertiary", "displayName": "Year −10～−5" },
+      "year-down-10": { "role": "tertiary", "displayName": "Year ≤ −10%" },
+      "hatch-light": { "role": "tertiary", "displayName": "Hatch Light" },
+      "hatch-dark": { "role": "tertiary", "displayName": "Hatch Dark" },
+      "ground": { "role": "neutral", "displayName": "Sky Ground", "canonical": "oklch(97.7% 0.006 239)" },
+      "panel": { "role": "neutral", "displayName": "Panel White" },
+      "line": { "role": "neutral", "displayName": "Hairline" },
+      "line-strong": { "role": "neutral", "displayName": "Firm Hairline" },
+      "ink": { "role": "neutral", "displayName": "Ink", "canonical": "oklch(25.7% 0.026 255)", "tonalRamp": ["#0A0B0E", "#22272D", "#3D4651", "#5C6775", "#7F8A99", "#A6AFBA", "#CCD1D9", "#ECEFF2"] },
+      "ink-2": { "role": "neutral", "displayName": "Ink 2" },
+      "ink-3": { "role": "neutral", "displayName": "Ink 3" },
+      "pill-neutral": { "role": "neutral", "displayName": "Pill Grey" },
+      "focus-ring": { "role": "neutral", "displayName": "Focus Blue" },
+      "selection": { "role": "neutral", "displayName": "Selection" },
+      "control-hover-edge": { "role": "neutral", "displayName": "Control Hover Edge" },
+      "button-disabled": { "role": "neutral", "displayName": "Button Disabled" }
+    },
+    "typographyMeta": {
+      "display": { "displayName": "Display", "purpose": "The 今日行動預報 headline sentence only." },
+      "forecast-word": { "displayName": "Forecast Word", "purpose": "One-word state in each coin cell: 做多 / 放空 / 持有 / 觀望." },
+      "headline": { "displayName": "Headline", "purpose": "Section heads such as 預報準確度." },
+      "title": { "displayName": "Title", "purpose": "Coin symbol heading the detail panel." },
+      "masthead": { "displayName": "Masthead", "purpose": "Page name on the office-blue band." },
+      "card-title": { "displayName": "Card Title", "purpose": "Rule name on a rule card." },
+      "lede": { "displayName": "Lede", "purpose": "Reason sentence and section intros, max 70ch." },
+      "figure": { "displayName": "Figure", "purpose": "Entry / stop / target numbers." },
+      "body": { "displayName": "Body", "purpose": "Running text; tabular numerals." },
+      "table": { "displayName": "Table", "purpose": "All tables; right-aligned figures." },
+      "label": { "displayName": "Label", "purpose": "Form labels, year number in a year block." },
+      "caption": { "displayName": "Caption", "purpose": "Level captions, percent change, legend keys, hints." }
+    },
+    "shadows": [
+      { "name": "cell-hover", "value": "0 4px 14px rgba(23, 74, 124, .08)", "purpose": "Coin cell under the pointer." },
+      { "name": "cell-selected", "value": "0 0 0 1px #174A7C, 0 6px 18px rgba(23, 74, 124, .12)", "purpose": "Coin cell whose detail is open." },
+      { "name": "sticky-panel", "value": "0 8px 28px rgba(23, 74, 124, .07)", "purpose": "Detail panel floating beside the grid." }
+    ],
+    "motion": [
+      { "name": "ease-house", "value": "cubic-bezier(.16, 1, .3, 1)", "purpose": "All state transitions and the year-block rise." },
+      { "name": "state-change", "value": ".2s", "purpose": "Button background, cell border and shadow." },
+      { "name": "disclosure-turn", "value": ".25s", "purpose": "Chevron rotation on 逐年完整數字." },
+      { "name": "year-rise", "value": ".7s, translateY(10px) from opacity .35, 45ms stagger per year", "purpose": "Year blocks entering the strip; removed under prefers-reduced-motion." }
+    ],
+    "breakpoints": [
+      { "name": "phone", "value": "600px" },
+      { "name": "stacked", "value": "1020px" },
+      { "name": "container", "value": "1280px" }
+    ]
+  },
+  "components": [
+    {
+      "name": "Primary Button",
+      "kind": "button",
+      "refersTo": "button-primary",
+      "description": "The single solid action (更新) in the settings bar.",
+      "html": "<button class=\"ds-btn\">更新</button>",
+      "css": ".ds-btn { height: 40px; padding: 0 22px; border: 0; border-radius: 8px; background: var(--office, #174A7C); color: #fff; font: 700 16px/1 'Noto Sans TC', 'Microsoft JhengHei', system-ui, sans-serif; cursor: pointer; transition: background .2s cubic-bezier(.16,1,.3,1); } .ds-btn:hover { background: var(--office-deep, #0F365C); } .ds-btn:focus-visible { outline: 3px solid #6FA3D6; outline-offset: 2px; } .ds-btn:disabled { background: #8FA3B8; cursor: progress; }"
+    },
+    {
+      "name": "Labelled Field",
+      "kind": "input",
+      "refersTo": "input-field",
+      "description": "Settings-bar field with its label stacked above.",
+      "html": "<label class=\"ds-field\">本金（USDT）<input class=\"ds-input\" type=\"number\" placeholder=\"例如 1000\"></label>",
+      "css": ".ds-field { display: grid; gap: 4px; width: 128px; font: 500 13px/1.6 'Noto Sans TC', system-ui, sans-serif; color: var(--ink-2, #44546A); } .ds-input { height: 40px; padding: 0 12px; border: 1px solid var(--line-strong, #B9CBDB); border-radius: 8px; background: #fff; color: var(--ink, #1B2430); font: 400 15px 'Noto Sans TC', system-ui, sans-serif; font-variant-numeric: tabular-nums; width: 100%; box-sizing: border-box; } .ds-input:hover { border-color: #8FA9C2; } .ds-input:focus-visible { outline: 3px solid #6FA3D6; outline-offset: 2px; }"
+    },
+    {
+      "name": "Forecast Band",
+      "kind": "nav",
+      "refersTo": "forecast-band",
+      "description": "Office-blue masthead with name, issue time and next issue.",
+      "html": "<header class=\"ds-band\"><h1>加密貨幣操作建議</h1><span>日線預報 · 依 11/7 上午08:00 收盤發布</span><span class=\"ds-next\">下次發布 11/8 上午08:00</span></header>",
+      "css": ".ds-band { display: flex; flex-wrap: wrap; align-items: baseline; gap: 24px; padding: 18px 32px; background: var(--office, #174A7C); color: #fff; font-family: 'Noto Sans TC', system-ui, sans-serif; } .ds-band h1 { margin: 0; font-size: 22px; font-weight: 700; letter-spacing: .02em; } .ds-band span { color: #D3E2F1; font-size: 15px; } .ds-band .ds-next { margin-left: auto; font-size: 14px; }"
+    },
+    {
+      "name": "Coin Forecast Cell",
+      "kind": "card",
+      "refersTo": "coin-cell",
+      "description": "Per-coin forecast button; fill and word colour follow the state (long, short, hold, wait).",
+      "html": "<div class=\"ds-cells\"><button class=\"ds-cell ds-long\" aria-pressed=\"true\"><span class=\"ds-sym\">ETH<span class=\"ds-px\">2,245.86</span></span><span class=\"ds-word\">做多</span><span class=\"ds-one\">止損 1,998.82\n止盈 2,739.95</span></button><button class=\"ds-cell ds-hold\"><span class=\"ds-sym\">BTC<span class=\"ds-px\">75,981</span></span><span class=\"ds-word\">持有多單</span><span class=\"ds-one\">+3.1% 持有中</span></button><button class=\"ds-cell\"><span class=\"ds-sym\">SOL<span class=\"ds-px\">90.46</span></span><span class=\"ds-word\">觀望</span><span class=\"ds-one\">尚無訊號</span></button></div>",
+      "css": ".ds-cells { display: grid; grid-template-columns: repeat(3, 160px); gap: 12px; } .ds-cell { all: unset; box-sizing: border-box; cursor: pointer; display: grid; gap: 2px; padding: 14px 16px 16px; min-height: 132px; background: #fff; border: 1px solid var(--line, #D9E4EE); border-radius: 10px; font-family: 'Noto Sans TC', system-ui, sans-serif; font-variant-numeric: tabular-nums; color: var(--ink, #1B2430); transition: border-color .2s cubic-bezier(.16,1,.3,1), box-shadow .2s cubic-bezier(.16,1,.3,1); } .ds-cell:hover { border-color: var(--line-strong, #B9CBDB); box-shadow: 0 4px 14px rgba(23,74,124,.08); } .ds-cell:focus-visible { outline: 3px solid #6FA3D6; outline-offset: 2px; } .ds-sym { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; font-weight: 700; font-size: 16px; } .ds-px { font-weight: 400; font-size: 13px; color: var(--ink-3, #5F6F82); } .ds-word { font-size: 28px; font-weight: 900; line-height: 1.25; margin-top: 6px; color: var(--ink-2, #44546A); } .ds-one { font-size: 13px; line-height: 1.45; color: var(--ink-3, #5F6F82); white-space: pre-line; } .ds-long { background: #E7F4EC; border-color: #A9D3B9; } .ds-long .ds-word { color: #1F7A47; } .ds-short { background: #FBE9E7; border-color: #EBB4AD; } .ds-short .ds-word { color: #B42318; } .ds-hold { background: #E6EFFA; border-color: #AFC8E6; } .ds-hold .ds-word { color: #2563A8; } .ds-cell[aria-pressed=true] { border-color: #174A7C; box-shadow: 0 0 0 1px #174A7C, 0 6px 18px rgba(23,74,124,.12); }"
+    },
+    {
+      "name": "Detail Panel with Levels",
+      "kind": "card",
+      "refersTo": "detail-panel",
+      "description": "Selected coin: state badge, explanation, entry/stop/target tiles, position-size note.",
+      "html": "<aside class=\"ds-detail\"><div class=\"ds-head\"><h3>ETH</h3><span>即時價 2,245.86</span></div><span class=\"ds-badge ds-b-long\">做多</span><p>最新 K 線收盤出現做多訊號。</p><dl class=\"ds-levels\"><div><dt>進場</dt><dd>2,245.86</dd></div><div><dt>止損</dt><dd>1,998.82<small>−11.0%</small></dd></div><div><dt>止盈</dt><dd>2,739.95<small>+22.0%</small></dd></div></dl><p class=\"ds-size\"><b>建議倉位：0.04048 枚</b><br>打到止損約虧 10 USDT。</p></aside>",
+      "css": ".ds-detail { width: 400px; box-sizing: border-box; display: grid; gap: 12px; padding: 22px 24px 24px; background: #fff; border: 1px solid var(--line, #D9E4EE); border-radius: 10px; box-shadow: 0 8px 28px rgba(23,74,124,.07); font: 400 15px/1.6 'Noto Sans TC', system-ui, sans-serif; font-variant-numeric: tabular-nums; color: var(--ink, #1B2430); } .ds-detail p { margin: 0; } .ds-head { display: flex; justify-content: space-between; align-items: baseline; } .ds-head h3 { margin: 0; font-size: 24px; font-weight: 900; } .ds-head span { color: var(--ink-3, #5F6F82); } .ds-badge { justify-self: start; padding: 2px 12px; border-radius: 999px; font-size: 14px; font-weight: 700; background: #E9EEF3; color: var(--ink-2, #44546A); } .ds-b-long { background: #1F7A47; color: #fff; } .ds-levels { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin: 0; } .ds-levels div { background: var(--ground, #F4F8FB); border-radius: 8px; padding: 8px 10px; } .ds-levels dt { font-size: 12px; color: var(--ink-3, #5F6F82); } .ds-levels dd { margin: 0; font-size: 17px; font-weight: 700; } .ds-levels small { display: block; font-size: 12px; font-weight: 400; color: var(--ink-3, #5F6F82); } .ds-size { background: var(--office-tint, #E4EEF7); border-radius: 8px; padding: 10px 12px; }"
+    },
+    {
+      "name": "Alert Note",
+      "kind": "custom",
+      "refersTo": "alert-note",
+      "description": "Amber warning for stale signals and 近期轉弱.",
+      "html": "<p class=\"ds-alert\"><b>近期轉弱：</b>最近 12 個月這條規則是虧的。長期統計仍通過，所以仍會給訊號。</p>",
+      "css": ".ds-alert { margin: 0; max-width: 520px; background: #FDF1E3; color: #6B3B08; border-radius: 8px; padding: 10px 12px; font: 400 15px/1.6 'Noto Sans TC', system-ui, sans-serif; }"
+    },
+    {
+      "name": "Rule Card with Year Strip",
+      "kind": "custom",
+      "refersTo": "rule-card",
+      "description": "Signature 預報準確度 block: verdict pill, years coloured on the rainfall scale, hatched when not allowed.",
+      "html": "<article class=\"ds-rule\"><div class=\"ds-top\"><h3>做多規則：200 均線 ＋ MACD ＋ 突破</h3><span class=\"ds-verdict ds-pass\">通過，會給訊號</span></div><div class=\"ds-strip\"><div class=\"ds-yr ds-off\"><b>2019</b><span>+1.2%</span><small>不允許交易</small></div><div class=\"ds-yr\" style=\"background:#174A7C;color:#fff\"><b>2020</b><span>+12.4%</span><small>31 筆 · 勝率 61%</small></div><div class=\"ds-yr\" style=\"background:#9DBEDD;color:#13324F\"><b>2021</b><span>+3.1%</span><small>44 筆 · 勝率 52%</small></div><div class=\"ds-yr\" style=\"background:#F8E0CC;color:#4A2507\"><b>2022</b><span>−1.4%</span><small>18 筆 · 勝率 39%</small></div><div class=\"ds-yr\" style=\"background:#7A3410;color:#fff\"><b>2023</b><span>−11.0%</span><small>9 筆 · 勝率 22%</small></div></div></article>",
+      "css": ".ds-rule { max-width: 640px; padding: 22px 24px; background: #fff; border: 1px solid var(--line, #D9E4EE); border-radius: 10px; font-family: 'Noto Sans TC', system-ui, sans-serif; font-variant-numeric: tabular-nums; color: var(--ink, #1B2430); } .ds-top { display: flex; flex-wrap: wrap; gap: 8px 16px; align-items: baseline; } .ds-top h3 { margin: 0; font-size: 18px; font-weight: 700; } .ds-verdict { font-size: 14px; font-weight: 700; padding: 2px 12px; border-radius: 999px; } .ds-pass { background: #174A7C; color: #fff; } .ds-fail { background: #EDF0F3; color: #44546A; } .ds-strip { display: grid; grid-template-columns: repeat(auto-fit, minmax(92px, 1fr)); gap: 6px; margin-top: 18px; } .ds-yr { border-radius: 8px; padding: 10px 10px 9px; min-height: 86px; display: grid; align-content: space-between; animation: ds-rise .7s cubic-bezier(.16,1,.3,1) backwards; } .ds-yr b { font-size: 13px; font-weight: 500; } .ds-yr span { font-size: 19px; font-weight: 900; line-height: 1.2; } .ds-yr small { font-size: 12px; } .ds-off { background: repeating-linear-gradient(135deg, #F1F4F7 0 7px, #E2E8EE 7px 9px); color: #44546A; } .ds-off span { font-weight: 500; } @keyframes ds-rise { from { transform: translateY(10px); opacity: .35; } } @media (prefers-reduced-motion: reduce) { .ds-yr { animation: none; } }"
+    },
+    {
+      "name": "Disclosure",
+      "kind": "custom",
+      "refersTo": "rule-card",
+      "description": "逐年完整數字 toggle with a drawn chevron, not a glyph.",
+      "html": "<details class=\"ds-disc\"><summary>逐年完整數字</summary><p>（表格）</p></details>",
+      "css": ".ds-disc summary { cursor: pointer; color: var(--office, #174A7C); font: 500 14px 'Noto Sans TC', system-ui, sans-serif; width: max-content; list-style: none; display: flex; align-items: center; gap: 8px; } .ds-disc summary::-webkit-details-marker { display: none; } .ds-disc summary::before { content: ''; width: 7px; height: 7px; border: solid var(--office, #174A7C); border-width: 0 2px 2px 0; transform: rotate(-45deg); transition: transform .25s cubic-bezier(.16,1,.3,1); } .ds-disc[open] summary::before { transform: rotate(45deg); } .ds-disc summary:focus-visible { outline: 3px solid #6FA3D6; outline-offset: 2px; border-radius: 6px; }"
+    }
+  ],
+  "narrative": {
+    "northStar": "The Forecast Office",
+    "overview": "The page is a public weather bulletin for trading: an office-blue masthead with issue time and next issue, one plain sentence for today (今日行動預報), a grid of per-coin forecasts, and the forecast's own verified track record (預報準確度) set out like a rainfall chart. It borrows the calm, civic voice of the 中央氣象署 forecast that its one reader already trusts: pale sky ground, white panels, a single institutional blue, and colour that only speaks when there is something to do.\n\nDensity is moderate and desktop-first. The answer sits at the top in heavy type; evidence lives one step below in lighter, smaller, tabular figures. Waiting (觀望) is rendered at the same size and weight as an actionable call, so \"do nothing\" reads as a forecast, not an empty state. The page is light throughout; an all-dark, low-contrast page is a confirmed rejection (PRODUCT.md accessibility note).",
+    "keyCharacteristics": [
+      "Pale sky ground (#F4F8FB) with white panels and hairline blue-grey borders; one deep office blue for authority.",
+      "Signal colours (green, red, blue, amber) are reserved per state and never decorative.",
+      "Year-by-year verification drawn as a graded colour band, like a rainfall map, with hatching for years the rule was not allowed to trade.",
+      "Noto Sans TC throughout with tabular numerals; weight 900 carries the answers.",
+      "Flat panels; soft blue-tinted shadow only on interactive or sticky surfaces."
+    ],
+    "rules": [
+      { "name": "The Reserved Signal Rule", "body": "Green means 做多 now, red means 放空 now, holding blue means a position is open, amber means warning. No other element may use these state tokens (the year scale has its own peach-to-brown steps), and waiting never borrows one: 觀望 stays ink-2 on white.", "section": "colors" },
+      { "name": "The Rainfall Scale Rule", "body": "Verification results use the blue-to-brown scale, never green and red, so a good past year can never be mistaken for a signal to act today.", "section": "colors" },
+      { "name": "The Hatch Means Not Allowed Rule", "body": "The 135° hatch (hatch-light 7px, hatch-dark 2px) marks only years the walk-forward rule was not allowed to trade, and the legend always says so in words.", "section": "colors" },
+      { "name": "The Tabular Rule", "body": "Every number on the page is tabular; prices, percentages and counts must align in columns and not jitter on refresh.", "section": "typography" },
+      { "name": "The Heavy Answer Rule", "body": "Weight 900 belongs to answers (headline sentence, forecast word, coin title, year value) and section heads. Explanations never go above 700.", "section": "typography" },
+      { "name": "The Blue Air Rule", "body": "Shadows are always blue-tinted, blurred, and offset straight down. Rule cards, settings and tables stay flat.", "section": "elevation" }
+    ],
+    "dos": [
+      "Do keep the page light: sky ground, white panels, ink text.",
+      "Do give 觀望 the same forecast-word size and weight as 做多 and 放空.",
+      "Do colour a coin cell only by its current state: long, short, hold, or plain.",
+      "Do draw verification on the eight-step blue-to-brown scale, each step with its own chosen text colour, and hatch years that were not allowed to trade.",
+      "Do keep every number tabular and right-aligned in tables.",
+      "Do tint any shadow with office blue (rgba(23, 74, 124, ≤.12)) and keep it on interactive or sticky surfaces.",
+      "Do use the house ease cubic-bezier(.16, 1, .3, 1) for state changes and honour reduced motion."
+    ],
+    "donts": [
+      "Don't use green or red anywhere except a 做多 / 放空 call that is valid now.",
+      "Don't use green or red on the verification scale.",
+      "Don't use the hatch for anything other than \"not allowed to trade\".",
+      "Don't build an all-dark or low-contrast page.",
+      "Don't turn the forecast into a stat-card dashboard or a wall of tables; the sentence and the grid come first, tables sit below them."
+    ]
+  }
+}
