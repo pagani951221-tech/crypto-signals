@@ -10,7 +10,7 @@
 
 ## Telegram 通知
 
-`.github/workflows/notify.yml` 每天台灣時間 08:10（日線收盤後）在 GitHub Actions 執行 `scan.js`：掃描成交量前 100 名，有新的進場訊號就傳 Telegram。需要在倉庫的 Settings → Secrets and variables → Actions 設定 `TELEGRAM_BOT_TOKEN` 與 `TELEGRAM_CHAT_ID`。Actions 頁面可手動執行並傳測試訊息。本機試跑：`node scan.js`（沒設定這兩個值時只印出訊息）。
+`.github/workflows/notify.yml` 在 GitHub Actions 執行 `scan.js`，掃描成交量前 100 名並傳 Telegram：每天台灣時間 08:10（日線收盤後）通知新的進場訊號與持有到期的部位；每小時檢查持有中的部位，碰到止損或止盈就提醒出場（同一筆只通知一次，紀錄存在 Actions 快取）。需要在倉庫的 Settings → Secrets and variables → Actions 設定 `TELEGRAM_BOT_TOKEN` 與 `TELEGRAM_CHAT_ID`。Actions 頁面可手動執行並傳測試訊息。本機試跑：`node scan.js`（沒設定這兩個值時只印出訊息）。
 
 ## 規則
 

@@ -2,16 +2,25 @@ name: 訊號通知
 
 on:
   schedule:
-    - cron: '10 0 * * *' # 每天 UTC 00:10＝台灣 08:10，日線收盤後（GitHub 排程可能延遲幾分鐘到半小時）
+    - cron: '10 0 * * *' # 每天 UTC 00:10＝台灣 08:10，日線收盤後：新的進場訊號、持有到期
+    - cron: '5 * * * *'  # 每小時：持有中的部位碰到止損或止盈（GitHub 排程可能延遲幾分鐘到半小時）
   workflow_dispatch:
     inputs:
+      mode:
+        description: 'signals＝進場訊號，exits＝出場提醒'
+        type: choice
+        options: [signals, exits]
+        default: signals
       test:
-        description: '沒有訊號也傳一則測試訊息'
+        description: '沒有事件也傳一則摘要'
         type: boolean
         default: true
 
 permissions:
   contents: read
+
+concurrency:
+  group: notify # 一次只跑一個，避免已通知紀錄互相覆蓋
 
 jobs:
   scan:
@@ -22,9 +31,22 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: 22
+      - name: 讀取已通知紀錄
+        uses: actions/cache/restore@v4
+        with:
+          path: .state
+          key: alerted-${{ github.run_id }}
+          restore-keys: alerted-
       - name: 掃描並通知
         run: node scan.js
         env:
+          MODE: ${{ github.event_name == 'schedule' && (github.event.schedule == '5 * * * *' && 'exits' || 'signals') || inputs.mode }}
+          TEST: ${{ inputs.test }}
           TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
           TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
-          TEST: ${{ inputs.test }}
+      - name: 儲存已通知紀錄
+        if: always()
+        uses: actions/cache/save@v4
+        with:
+          path: .state
+          key: alerted-${{ github.run_id }}

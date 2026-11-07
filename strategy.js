@@ -136,7 +136,8 @@ function backtest(b, x, cand, ex, fund = NO_FUNDING) {
         : i - p.in + 1 >= MAX_HOLD ? b[i].c : null;
       if (out !== null) {
         const f = d < 0 ? fund(b[p.in].t, b[i].t + barMs) : 0;
-        trades.push({ in: p.in, out: i, t: b[p.in].t, T: b[i].t + barMs, ret: d * (out / p.px - 1) - COST + f });
+        trades.push({ in: p.in, out: i, t: b[p.in].t, T: b[i].t + barMs, ret: d * (out / p.px - 1) - COST + f,
+          why: hitStop ? 'stop' : hitTarget ? 'target' : 'time', px: p.px, stop: p.stop, target: p.target, exit: out });
         p = null;
       }
     }
@@ -289,7 +290,7 @@ async function livePrice(symbol) {
 
 if (typeof module !== 'undefined') {
   module.exports = { sma, ema, rsi, indicators, candidates, makeCand, backtest, stats, runRule, walkForward, sizing, freshness, coinOk, exitFor,
-    fetchBars, fundingFn, fetchFunding, allPrices, topCoins, pool, BASKET, TF };
+    fetchBars, fundingFn, fetchFunding, allPrices, topCoins, pool, BASKET, TF, MAX_HOLD };
 
   if (require.main === module) (async () => {
     const assert = require('assert');
@@ -316,6 +317,9 @@ if (typeof module !== 'undefined') {
     b = flat(); b[203].h = 103;                           // 放空碰到止損 102
     near(run(b, -1).trades[0].ret, -0.02 - COST - fund3d);
     r = run(flat(), 1); assert.strictEqual(r.trades[0].out, 220); near(r.trades[0].ret, -COST); // 滿 20 根出場
+    assert.strictEqual(r.trades[0].why, 'time');
+    b = flat(); b[203].h = 103; assert.strictEqual(run(b, 1).trades[0].why, 'target');
+    b = flat(); b[203].l = 97; assert.strictEqual(run(b, 1).trades[0].why, 'stop');
     r = run(flat(), 1, 229); assert.deepStrictEqual([r.state, r.pos.stop, r.pos.target], ['enter', 98, 102]);
     r = run(flat(), -1, 225); assert.deepStrictEqual([r.state, r.pos.stop, r.pos.target], ['hold', 102, 98]);
     const s = stats([{ ret: 0.1 }, { ret: 0.1 }, { ret: -0.05 }]);
