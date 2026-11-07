@@ -84,9 +84,30 @@ async function loadRevenue() {
     return o;
   });
 
+  // 今年回顧：漲幅前 30 名（還原權息、含息），規則有沒有抓到；只是檢查規則，不是選股建議
+  const Y = new Date(lastT + 8 * 36e5).getUTCFullYear(), yr = t => new Date(t + 8 * 36e5).getUTCFullYear();
+  const ytdAll = data.map(d => {
+    const { b, r } = d, x = r.x, i0 = b.findLastIndex(v => yr(v.t) < Y);
+    if (i0 < 0 || i0 === b.length - 1) return null;
+    const tr = r.trades.filter(t => t.in > i0), p = r.pos && r.pos.in > i0 ? r.pos : null;
+    let why = null; // 沒進場的原因
+    if (!tr.length && !p) {
+      const sig = []; for (let i = i0 + 1; i < b.length; i++) if (x.entry[i] && !x.entry[i - 1]) sig.push(i);
+      const carry = r.trades.some(t => t.in <= i0 && t.out > i0) || (r.pos && r.pos.in <= i0);
+      why = carry ? 'carry' : !sig.length ? 'nohigh' : sig.every(i => x.liq[i] < R.MIN_LIQ) ? 'liq' : 'rev';
+    }
+    return { code: d.code, name: d.name, mkt: d.mkt, ret: b.at(-1).c / b[i0].c - 1, n: tr.length,
+      real: tr.length ? tr.reduce((a, t) => a * (1 + t.ret), 1) - 1 : null, open: p ? b.at(-1).c / p.px - 1 : null, why };
+  }).filter(Boolean).sort((a, b) => b.ret - a.ret);
+  const dbl = ytdAll.filter(o => o.ret >= 1);
+  const ytd = { y: Y, n: ytdAll.length, dbl: dbl.length, dblCaught: dbl.filter(o => !o.why).length,
+    top: ytdAll.slice(0, 30).map(o => [o.code, o.name, o.mkt, +o.ret.toFixed(4), o.n, o.real == null ? null : +o.real.toFixed(4), o.open == null ? null : +o.open.toFixed(4), o.why]) };
+  console.log(`今年回顧：${ytd.n} 檔，漲一倍以上 ${ytd.dbl} 檔，規則今年有進場 ${ytd.dblCaught} 檔`);
+
   fs.writeFileSync('tw.json', JSON.stringify({
     updated: new Date().toISOString(), lastT, n: data.length, nValid: data.filter(d => d.ok).length, minLiq: R.MIN_LIQ, cost: TW_COST,
     flowDays: fl.map(f => f[0]).reverse(),
+    ytd,
     rule: { name: R.NAME, sl: R.SL, hold: R.HOLD },
     val: { pass: val.pass, rows: val.rows.map(r => ({ ...r, st: clean(r.st) })), wf: clean(val.wf), recent: clean(val.recent), total: clean(val.total),
       avgR: rs.length ? rs.reduce((s, v) => s + v, 0) / rs.length : 0, hold },

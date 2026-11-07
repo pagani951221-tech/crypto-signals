@@ -249,6 +249,7 @@
     <p>每次打開都把掃描到的所有幣合併，重新做逐年滾動驗證：每年 1 月 1 日只看當時已經結束的交易，合併結果明顯賺錢（至少 50 筆、t 值 ≥ 2）才允許那一年交易；允許年份的成績也要賺錢（t 值 ≥ 1），而且到現在仍然允許，才會給出訊號。</p>
     <p class="exit" id="exit"></p>
     <div id="val"></div>
+    <div id="ytd"></div>
   </section>
 
   <section class="about">
@@ -603,6 +604,7 @@ ${exitTxt}`, text: head + sizeText(live, p, d, r),
     val = { 1: j.val, [-1]: { pass: false, rows: [], wf: { n: 0 }, recent: { n: 0 }, total: { n: 0 }, avgR: 0 } };
     chartKey = null;
     renderVal();
+    renderYtd(j.ytd);
     const alerts = render();
     $('go').disabled = false;
     if (fromTimer && seen && 'Notification' in window && Notification.permission === 'granted')
@@ -629,6 +631,21 @@ ${exitTxt}`, text: head + sizeText(live, p, d, r),
     $('next').textContent = `下次更新 ${at} · 會自動更新`;
   }
 
+  // 今年漲幅前 30 名，規則有沒有抓到（只是回頭檢查規則，不是選股建議）
+  function renderYtd(y) {
+    if (!y) { $('ytd').innerHTML = ''; return; }
+    const WHY = { nohigh: '沒出現放量創新高', liq: '訊號當下成交量太小', rev: '訊號當下營收沒創 12 個月新高', carry: '去年進場的部位還沒出場，今年沒有新訊號' };
+    const row = ([code, name, mkt, ret, n, real, open, why]) => {
+      const got = why ? `<td colspan="2">沒進場：${WHY[why]}</td>`
+        : `<td>${n ? `${n} 次，合計 ${pct(real)}` : '—'}</td><td>${open == null ? '—' : `持有中 ${pct(open)}`}</td>`;
+      return `<tr><td>${esc(name)}（${code}）</td><td>${pct(ret)}</td>${got}</tr>`;
+    };
+    $('ytd').innerHTML = `<details class="years"><summary>${y.y} 年漲最多的股票，規則有沒有抓到</summary>
+      <p class="meta">這是回頭檢查規則用的，<b>不是選股建議</b>：已經大漲的股票不代表會繼續漲。${y.y} 年到目前 ${y.n} 檔裡有 ${y.dbl} 檔漲一倍以上，規則今年有進場其中 ${y.dblCaught} 檔。
+      報酬是還原權息（含息），規則的報酬已扣成本；「合計」是今年每次進出場連乘，常常只賺到一段，因為跌破 50 日均線就會先賣。2018–2025 年驗證過：年初看站上均線、成交量大、營收成長來挑股票，並沒有比較容易挑到翻倍股。</p>
+      <div class="scroll"><table><tr><th>股票</th><th>今年漲跌</th><th>規則今年已出場</th><th>規則持有中</th></tr>${y.top.map(row).join('')}</table></div></details>`;
+  }
+
   // 依市場切換畫面：台股隱藏加密貨幣專用的設定
   function applyMarket() {
     const tw = isTW();
@@ -648,6 +665,7 @@ ${exitTxt}`, text: head + sizeText(live, p, d, r),
     savePrefs();
     $('go').disabled = true;
     $('twnote').hidden = true;
+    renderYtd(null);
     $('status').textContent = '讀取成交量排行…';
     const EX = $('ex').value;
     let scan, note = '';
