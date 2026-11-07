@@ -254,6 +254,26 @@ async function fetchFunding(symbol) {
   return ev;
 }
 
+// 最多 n 個請求同時進行，避免一次打太多被交易所限流
+async function pool(list, n, fn) {
+  const out = []; let i = 0;
+  await Promise.all(Array.from({ length: n }, async () => { while (i < list.length) { const k = i++; out[k] = await fn(list[k]); } }));
+  return out;
+}
+
+// 成交量前 n 名：排除穩定幣、黃金與槓桿代幣，並要求至少 18 個月歷史（新上市的股票代幣等資料不夠回測）
+const NOT_COIN = /^(USDC|FDUSD|TUSD|USDP|DAI|BUSD|EUR|EURI|AEUR|TRY|BRL|USD1|USDE|USDS|PYUSD|RLUSD|RWUSD|BFUSD|XUSD|U|PAXG|XAUT|WBTC|WBETH|BETH)$/;
+async function topCoins(n = 30) {
+  const res = await fetch(`${API}/ticker/24hr`).catch(() => null);
+  if (!res || !res.ok) throw new Error('取不到成交量排行');
+  const ranked = (await res.json()).filter(t => t.symbol.endsWith('USDT'))
+    .map(t => ({ b: t.symbol.slice(0, -4), v: +t.quoteVolume }))
+    .filter(t => /^[A-Z0-9]{1,15}$/.test(t.b) && !NOT_COIN.test(t.b) && !/(UP|DOWN|BULL|BEAR)$/.test(t.b))
+    .sort((a, b) => b.v - a.v).slice(0, n + 60);
+  const months = await pool(ranked, 8, t => fetch(`${API}/klines?symbol=${t.b}USDT&interval=1M&limit=18`).then(r => r.ok ? r.json() : []).catch(() => []));
+  return ranked.filter((t, i) => months[i].length >= 18).slice(0, n).map(t => t.b);
+}
+
 // 全部交易對的即時價，一次請求；回傳 { BTC: 76000, ... }（只取 USDT 計價）
 async function allPrices() {
   const res = await fetch(`${API}/ticker/price`);
@@ -268,7 +288,8 @@ async function livePrice(symbol) {
 }
 
 if (typeof module !== 'undefined') {
-  module.exports = { sma, ema, rsi, indicators, candidates, makeCand, backtest, stats, runRule, walkForward, sizing, freshness, fetchBars, fundingFn, fetchFunding };
+  module.exports = { sma, ema, rsi, indicators, candidates, makeCand, backtest, stats, runRule, walkForward, sizing, freshness, coinOk, exitFor,
+    fetchBars, fundingFn, fetchFunding, allPrices, topCoins, pool, BASKET, TF };
 
   if (require.main === module) (async () => {
     const assert = require('assert');

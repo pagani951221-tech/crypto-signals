@@ -1,0 +1,30 @@
+name: 訊號通知
+
+on:
+  schedule:
+    - cron: '10 0 * * *' # 每天 UTC 00:10＝台灣 08:10，日線收盤後（GitHub 排程可能延遲幾分鐘到半小時）
+  workflow_dispatch:
+    inputs:
+      test:
+        description: '沒有訊號也傳一則測試訊息'
+        type: boolean
+        default: true
+
+permissions:
+  contents: read
+
+jobs:
+  scan:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: 掃描並通知
+        run: node scan.js
+        env:
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+          TEST: ${{ inputs.test }}

@@ -255,7 +255,7 @@
 
 <script src="https://unpkg.com/lightweight-charts@4.2.0/dist/lightweight-charts.standalone.production.js"></script>
 <!-- 改 strategy.js 時把 v 加 1，瀏覽器才會抓新版而不是用快取 -->
-<script src="strategy.js?v=7"></script>
+<script src="strategy.js?v=8"></script>
 <script>
   const $ = id => document.getElementById(id);
   const pct = v => (v >= 0 ? '+' : '−') + Math.abs(v * 100).toFixed(1) + '%';
@@ -407,13 +407,6 @@
     } catch (e) { return { sym, err: e.message }; }
   }
 
-  // 最多 n 個請求同時進行，避免一次打太多被交易所限流
-  async function pool(list, n, fn) {
-    const out = []; let i = 0;
-    await Promise.all(Array.from({ length: n }, async () => { while (i < list.length) { const k = i++; out[k] = await fn(list[k]); } }));
-    return out;
-  }
-
   // 成交量排行記 12 小時，不必每次重算
   async function scanList(n) {
     const key = 'top' + n;
@@ -421,19 +414,6 @@
     const list = await topCoins(n);
     try { localStorage.setItem(key, JSON.stringify({ t: Date.now(), list })); } catch {}
     return list;
-  }
-
-  // 成交量前 n 名：排除穩定幣、黃金與槓桿代幣，並要求至少 18 個月歷史（新上市的股票代幣等資料不夠回測）
-  const NOT_COIN = /^(USDC|FDUSD|TUSD|USDP|DAI|BUSD|EUR|EURI|AEUR|TRY|BRL|USD1|USDE|USDS|PYUSD|RLUSD|RWUSD|BFUSD|XUSD|U|PAXG|XAUT|WBTC|WBETH|BETH)$/;
-  async function topCoins(n = 30) {
-    const res = await fetch(`${API}/ticker/24hr`).catch(() => null);
-    if (!res || !res.ok) throw new Error('取不到成交量排行');
-    const ranked = (await res.json()).filter(t => t.symbol.endsWith('USDT'))
-      .map(t => ({ b: t.symbol.slice(0, -4), v: +t.quoteVolume }))
-      .filter(t => /^[A-Z0-9]{1,15}$/.test(t.b) && !NOT_COIN.test(t.b) && !/(UP|DOWN|BULL|BEAR)$/.test(t.b))
-      .sort((a, b) => b.v - a.v).slice(0, n + 60);
-    const months = await pool(ranked, 8, t => fetch(`${API}/klines?symbol=${t.b}USDT&interval=1M&limit=18`).then(r => r.ok ? r.json() : []).catch(() => []));
-    return ranked.filter((t, i) => months[i].length >= 18).slice(0, n).map(t => t.b);
   }
 
   // 即時 K 線：已收盤的 K 線來自回測資料，正在跑的那根由 Binance 即時串流更新
