@@ -16,6 +16,7 @@ colors:
   ink: "#1B2430"
   ink-2: "#44546A"
   ink-3: "#5F6F82"
+  chart-ma: "#8C9BAB"
   button-disabled: "#8FA3B8"
   pill-neutral: "#E9EEF3"
   long: "#1F7A47"
@@ -396,3 +397,14 @@ Native details/summary in office blue, 14px 500, with the custom 7px chevron tha
 - **Don't** use the hatch for anything other than "not allowed to trade".
 - **Don't** build an all-dark or low-contrast page.
 - **Don't** turn the forecast into a stat-card dashboard or a wall of tables; the sentence and the grid come first, tables sit below them.
+
+## Live chart (即時 K 線)
+
+Full-width white panel below the coin grid, same corners and hairline as the rule cards (10px, #D9E4EE), 20px 24px padding, chart height 420px (320px at ≤600px). Follows the selected coin and timeframe. Built with TradingView Lightweight Charts 4.2.0 (attribution logo kept as its licence requires).
+
+- Candles: up #2F6699, down #A4501A (the year scale's blue and rust; green and red stay reserved for signal states). No candle borders.
+- 200-period moving average: #8C9BAB, 3px solid, no value label. It is the rule's first condition, so it is the only overlay.
+- Price lines for an active position: entry #1B2430 solid, stop #A4501A dashed, target #174A7C dashed, each with an axis label (進場 / 止損 / 止盈).
+- Closed candles come from the backtest data (last 800 shown, 160 visible on open); the forming candle is updated from Binance's public kline stream. Status line in caption style (13px, ink-3): "即時 <price> · <time> 更新", switching to the warn ink #6B3B08 when the stream drops.
+- Grid lines #EEF3F8, scale borders #D9E4EE, axis text #44546A at 12px in the house face; times shown in local time.
+

@@ -95,6 +95,17 @@
   th:first-child, td:first-child { text-align: left; }
   .scroll { overflow-x: auto; }
 
+  /* 即時 K 線 */
+  .live { margin-top: 24px; background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius); padding: 20px 24px 16px; }
+  .live .top { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 16px; }
+  .live h2 { font-size: 18px; font-weight: 700; }
+  #chart-meta { font-size: 13px; color: var(--ink-3); }
+  #chart-meta.down { color: #6B3B08; }
+  .chart-box { height: 420px; margin-top: 12px; }
+  .live .keys2 { display: flex; flex-wrap: wrap; gap: 4px 18px; margin-top: 8px; font-size: 13px; color: var(--ink-3); }
+  .live .keys2 i { display: inline-block; width: 18px; height: 0; border-top: 2px solid; vertical-align: 4px; margin-right: 6px; }
+  .live .keys2 b { display: inline-block; width: 10px; height: 12px; border-radius: 3px; vertical-align: -1px; margin-right: 6px; }
+
   /* 預報準確度 */
   .accuracy { margin-top: 56px; padding-bottom: 8px; }
   .accuracy > h2 { font-size: 26px; font-weight: 900; }
@@ -152,7 +163,8 @@
     form button { flex: 1 1 100%; }
     .grid { grid-template-columns: repeat(2, 1fr); }
     .levels { grid-template-columns: 1fr 1fr; }
-    .detail, .rule { padding: 18px 16px; }
+    .detail, .rule, .live { padding: 18px 16px; }
+    .chart-box { height: 320px; }
     .sum th[scope=row] { white-space: normal; min-width: 7em; max-width: 9em; }
   }
   @media (prefers-reduced-motion: reduce) { * { animation: none !important; transition: none !important; } }
@@ -191,6 +203,12 @@
     <aside class="detail" id="detail" aria-live="polite"><p class="meta">讀取中，完成後點一個幣看詳細建議。</p></aside>
   </section>
 
+  <section class="live" id="live" aria-labelledby="chart-h" hidden>
+    <div class="top"><h2 id="chart-h">即時 K 線</h2><span id="chart-meta" aria-live="off"></span></div>
+    <div class="chart-box" id="chart"></div>
+    <p class="keys2"><span><b style="background:#2F6699"></b>上漲</span><span><b style="background:#A4501A"></b>下跌</span><span><i style="border-color:#8C9BAB;border-top-width:3px"></i>200 均線（規則的第一個條件）</span><span><i style="border-color:#1B2430"></i>進場</span><span><i style="border-color:#A4501A;border-top-style:dashed"></i>止損</span><span><i style="border-color:#174A7C;border-top-style:dashed"></i>止盈</span></p>
+  </section>
+
   <section class="accuracy" aria-labelledby="acc-h">
     <h2 id="acc-h">預報準確度</h2>
     <p>每次打開都在 10 個主流幣上重新做逐年滾動驗證：每年 1 月 1 日只看當時已經結束的交易，合併結果明顯賺錢（至少 50 筆、t 值 ≥ 2）才允許那一年交易；允許年份的成績也要賺錢（t 值 ≥ 1），而且到現在仍然允許，才會給出訊號。</p>
@@ -216,6 +234,7 @@
   </section>
 </main>
 
+<script src="https://unpkg.com/lightweight-charts@4.2.0/dist/lightweight-charts.standalone.production.js"></script>
 <!-- 改 strategy.js 時把 v 加 1，瀏覽器才會抓新版而不是用快取 -->
 <script src="strategy.js?v=6"></script>
 <script>
@@ -359,12 +378,62 @@
     } catch (e) { return { sym, err: e.message }; }
   }
 
+  // 即時 K 線：已收盤的 K 線來自回測資料，正在跑的那根由 Binance 即時串流更新
+  const TZ = -new Date().getTimezoneOffset() * 60; // 圖表以 UTC 顯示，平移成本地時間
+  const toT = ms => Math.floor(ms / 1000) + TZ;
+  let chart, candles, maLine, priceLines = [], ws, chartKey, chartBars;
+  function drawChart() {
+    const hit = items.find(i => i.sym === selected && i.bars);
+    $('live').hidden = !hit || !window.LightweightCharts;
+    if ($('live').hidden) return;
+    const tf = $('tf').value, key = hit.sym + '|' + tf;
+    $('chart-h').textContent = `${hit.sym} 即時 K 線（${TF[tf].label}）`;
+    if (!chart) {
+      chart = LightweightCharts.createChart($('chart'), {
+        autoSize: true,
+        layout: { background: { color: '#FFFFFF' }, textColor: '#44546A', fontFamily: '"Noto Sans TC", "Microsoft JhengHei", system-ui, sans-serif', fontSize: 12 },
+        grid: { vertLines: { color: '#EEF3F8' }, horzLines: { color: '#EEF3F8' } },
+        rightPriceScale: { borderColor: '#D9E4EE' }, timeScale: { borderColor: '#D9E4EE', rightOffset: 6 },
+        localization: { locale: 'zh-TW' },
+      });
+      candles = chart.addCandlestickSeries({ upColor: '#2F6699', downColor: '#A4501A', wickUpColor: '#2F6699', wickDownColor: '#A4501A', borderVisible: false });
+      maLine = chart.addLineSeries({ color: '#8C9BAB', lineWidth: 3, priceLineVisible: false, lastValueVisible: false, crosshairMarkerVisible: false });
+    }
+    if (key !== chartKey || hit.bars !== chartBars) {
+      const bars = hit.bars.slice(-800), ma = sma(hit.bars.map(b => b.c), 200).slice(-800);
+      candles.setData(bars.map(b => ({ time: toT(b.t), open: b.o, high: b.h, low: b.l, close: b.c })));
+      maLine.setData(bars.flatMap((b, i) => ma[i] == null ? [] : [{ time: toT(b.t), value: ma[i] }]));
+      chart.applyOptions({ timeScale: { timeVisible: tf !== '1d' } });
+      if (key !== chartKey) { chart.timeScale().setVisibleLogicalRange({ from: bars.length - 160, to: bars.length + 6 }); live(hit.sym, tf); }
+      chartKey = key; chartBars = hit.bars;
+    }
+    priceLines.forEach(l => candles.removePriceLine(l));
+    const r = hit.runs.find(r => val[r.dir].pass && r.pos && r.state !== 'wait');
+    priceLines = !r ? [] : [
+      { price: r.pos.px, color: '#1B2430', lineStyle: 0, title: '進場' },
+      { price: r.pos.stop, color: '#A4501A', lineStyle: 2, title: '止損' },
+      { price: r.pos.target, color: '#174A7C', lineStyle: 2, title: '止盈' },
+    ].map(o => candles.createPriceLine({ ...o, lineWidth: 1, axisLabelVisible: true }));
+  }
+  function live(sym, tf) {
+    if (ws) ws.close();
+    const me = ws = new WebSocket(`wss://data-stream.binance.vision/ws/${sym.toLowerCase()}usdt@kline_${tf}`);
+    $('chart-meta').className = ''; $('chart-meta').textContent = '連線中…';
+    me.onmessage = e => {
+      if (ws !== me) return;
+      const k = JSON.parse(e.data).k;
+      try { candles.update({ time: toT(k.t), open: +k.o, high: +k.h, low: +k.l, close: +k.c }); } catch {}
+      $('chart-meta').textContent = `即時 ${price(+k.c)} · ${new Date().toLocaleTimeString('zh-TW')} 更新`;
+    };
+    me.onclose = () => { if (ws === me) { $('chart-meta').className = 'down'; $('chart-meta').textContent = '即時連線中斷，按「更新」重新連線'; } };
+  }
+
   // 畫出各幣預報與詳細，回傳目前可進場的通知
   function render() {
     const shown = items.filter(i => i.show).map(item => ({ item, j: judge(item) }));
     if (!shown.some(s => s.item.sym === selected))
       selected = (shown.find(s => s.j.pri === 3) || shown.find(s => s.j.pri === 2) || shown[0] || {}).item?.sym ?? null;
-    renderHeadline(shown); renderGrid(shown); renderDetail(shown);
+    renderHeadline(shown); renderGrid(shown); renderDetail(shown); drawChart();
     const tf = $('tf').value;
     return shown.flatMap(({ item, j }) => j.lines.filter(l => l.alert).map(l => ({ key: `${item.sym}|${tf}|${l.alert.key}`, title: `${item.sym} ${TF[tf].label}`, body: l.alert.body })));
   }
@@ -391,6 +460,7 @@
     $('go').disabled = true;
     $('status').textContent = '讀取行情、資金費率並回測中…（第一次開啟要抓完整資金費率歷史，約需 10～20 秒）';
     items = await Promise.all([...new Set([...syms, ...BASKET])].map(s => one(s, tf)));
+    chartKey = null; // 重新整理後一律重新連線即時串流
     items.forEach(i => i.show = syms.includes(i.sym));
     const alerts = compute();
     $('go').disabled = false;
