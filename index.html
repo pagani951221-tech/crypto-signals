@@ -459,6 +459,10 @@
     }
     if (key !== chartKey || hit.bars !== chartBars) {
       const bars = hit.bars.slice(-800), ma = sma(hit.bars.map(b => b.c), 200).slice(-800);
+      // 小數位數跟著價格走：BTC 兩位，0.0018 的幣六位（預設只有兩位，低價幣會全顯示成 0.00）
+      const dec = Math.min(10, Math.max(2, Math.ceil(-Math.log10(bars.at(-1).c)) + 3));
+      const priceFormat = { type: 'price', precision: dec, minMove: +(10 ** -dec).toFixed(dec) };
+      candles.applyOptions({ priceFormat }); maLine.applyOptions({ priceFormat });
       candles.setData(bars.map(b => ({ time: toT(b.t), open: b.o, high: b.h, low: b.l, close: b.c })));
       maLine.setData(bars.flatMap((b, i) => ma[i] == null ? [] : [{ time: toT(b.t), value: ma[i] }]));
       chart.applyOptions({ timeScale: { timeVisible: tf !== '1d' } });
