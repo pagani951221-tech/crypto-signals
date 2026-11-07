@@ -223,7 +223,7 @@
     <h2 id="headline">讀取行情中…</h2>
     <p id="reason"></p>
     <p id="status"></p>
-    <p class="alert" id="twnote" hidden><b>台股是實驗性質：</b>同一條規則在上市市值前 150 大，只有 2024 年起通過驗證，賺錢集中在近幾年的多頭，更早的年份大多打平；扣掉手續費與證交稅（一來一回約 0.785%）後，每筆平均只多賺一點。資料每個交易日 14:40 後由雲端更新（來源：證交所、Yahoo Finance，價格為還原權息價）。只做多、不開槓桿，盈虧比固定 2 倍。</p>
+    <p class="alert" id="twnote" hidden><b>台股是實驗性質：</b>範圍是上市＋上櫃全部普通股。同一條規則扣掉手續費與證交稅（一來一回約 0.785%）後，在台股整體幾乎不賺錢，逐年滾動驗證目前沒有通過，所以不會給訊號；只用大型股時看起來有效，但那比較像碰上近幾年的多頭。近 20 天平均每天成交不到 1,000 萬元的股票不給訊號、也不列入驗證。資料每個交易日 14:40 後由雲端更新（來源：證交所、Yahoo Finance，價格為還原權息價）。只做多、不開槓桿，盈虧比固定 2 倍。</p>
     <div class="pick">
       <label for="pick" id="pickl">查看其他幣</label>
       <input id="pick" list="coinlist" autocomplete="off" spellcheck="false" placeholder="選擇或輸入代號，例如 PEPE">
@@ -353,6 +353,8 @@
   // 一個幣的總判斷：取所有已通過方向中優先度最高的
   function judge(item) {
     if (item.err) return { k: 'err', label: '無資料', one: item.err, lines: [] };
+    if (item.illiquid) return { k: 'wait', label: '觀望', one: '成交量太小，跳過', pri: -1,
+      lines: [{ text: `<p>近 20 天平均每天成交約 ${item.liq.toLocaleString()} 萬元，不到 1,000 萬元。成交量太小，價差與滑價會吃掉利潤，所以不給訊號。</p>` }] };
     const lines = item.runs.filter(r => val[r.dir].pass).map(r => lineFor(r, item));
     if (!lines.length) return { k: 'wait', label: '觀望', one: '規則未通過驗證', lines, pri: -1 };
     const top = lines.reduce((m, l) => l.pri > m.pri ? l : m);
@@ -399,7 +401,7 @@
     }
     if (!passed.length) {
       $('headline').textContent = `今日行動預報：${TF[tf].label}不建議操作`;
-      $('reason').textContent = `${TF[tf].label}的規則沒有通過逐年滾動驗證，照技術訊號買賣在歷史上是虧的，所有幣都建議觀望。` + (tf !== '1d' ? '要看有效的預報，請把週期切換到日線。' : '');
+      $('reason').textContent = isTW() ? '這條規則在台股全部股票上沒有通過逐年滾動驗證，扣掉成本後幾乎不賺錢，所有股票都建議觀望。下方可以看逐年成績。' : `${TF[tf].label}的規則沒有通過逐年滾動驗證，照技術訊號買賣在歷史上是虧的，所有幣都建議觀望。` + (tf !== '1d' ? '要看有效的預報，請把週期切換到日線。' : '');
       return;
     }
     const act = shown.filter(s => s.j.pri === 3), hold = shown.filter(s => s.j.pri === 2);
@@ -422,7 +424,7 @@
 
   function renderVal(ex) {
     $('exit').textContent = isTW()
-      ? `台股（實驗性）：止損 3 ATR、止盈 6 ATR（盈虧比固定 2 倍），只做多。日線，用上市市值前 ${items.length} 大合併計算，成本一來一回約 ${(twCost * 100).toFixed(3)}%。`
+      ? `台股（實驗性）：止損 3 ATR、止盈 6 ATR（盈虧比固定 2 倍），只做多。日線，用上市櫃 ${twValid} 檔成交量足夠的股票合併計算，成本一來一回約 ${(twCost * 100).toFixed(3)}%。`
       : `目前出場設定：止損 ${ex.sl} ATR、止盈 ${+ex.tp.toFixed(2)} ATR（設定盈虧比 ${+(ex.tp / ex.sl).toFixed(2)} 倍）。${TF[$('tf').value].label}，用掃描到的 ${items.filter(i => i.show && i.runs).length} 個幣合併計算。`;
     $('val').innerHTML = (isTW() ? [1] : [1, -1]).map(d => {
       const v = val[d];
@@ -564,16 +566,16 @@
   }
 
   // 台股：讀雲端每天算好的 tw.json，轉成和加密貨幣相同的格式
-  let twCost = 0.00785;
+  let twCost = 0.00785, twValid = 0;
   async function runTW(fromTimer = false) {
     $('go').disabled = true;
     $('status').textContent = '讀取台股資料…';
     let j;
     try { const res = await fetch('tw.json', { cache: 'no-cache' }); if (!res.ok) throw 0; j = await res.json(); }
     catch { $('go').disabled = false; $('headline').textContent = '暫時讀不到台股資料'; $('reason').textContent = '台股資料由雲端每個交易日 14:40 後更新，請稍後再試。'; $('status').textContent = ''; return; }
-    twCost = j.cost;
+    twCost = j.cost; twValid = j.nValid ?? j.stocks.length;
     items = j.stocks.map(s => ({
-      sym: s.code, label: s.name, full: `${s.name}（${s.code}）`, tw: true, show: true, live: s.close, lastT: s.lastT,
+      sym: s.code, label: s.name, full: `${s.name}（${s.code}）`, tw: true, show: true, illiquid: s.illiquid, liq: s.liq, live: s.close, lastT: s.lastT,
       bars: s.chart ? s.chart.map(c => ({ t: c[0], o: c[1], h: c[2], l: c[3], c: c[4] })) : null,
       ma: s.chart ? s.chart.map(c => c[5]) : null,
       runs: [{ dir: 1, state: s.state, pos: s.pos, own: s.own, trades: [] }],
@@ -589,7 +591,7 @@
     document.title = (alerts.length ? `(${alerts.length}) ` : '') + '台股操作建議（實驗性）';
     $('issue').textContent = `台股日線 · 依 ${new Date(j.lastT).toLocaleDateString('zh-TW', { month: 'numeric', day: 'numeric' })} 收盤 · 雲端更新於 ${new Date(j.updated).toLocaleString('zh-TW', { month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit' })}`;
     const act = items.filter(i => judge(i).pri >= 2).length;
-    $('status').textContent = `上市市值前 ${items.length} 大，${act} 檔有機會操作。價格為最近一個交易日的收盤價。`;
+    $('status').textContent = `上市櫃 ${items.length} 檔（其中 ${twValid} 檔成交量足夠），${act} 檔有機會操作。價格為最近一個交易日的收盤價。`;
     scheduleTW();
   }
   // 下一個交易日 14:45（台灣時間；只跳過週末）
@@ -684,7 +686,7 @@
   async function pick() {
     if (isTW()) {
       const q = $('pick').value.trim(), hit = items.find(i => i.sym === q || i.label === q);
-      if (!hit) { $('status').textContent = `台股只提供上市市值前 ${items.length} 大，找不到「${q}」。`; return; }
+      if (!hit) { $('status').textContent = `在上市櫃 ${items.length} 檔普通股裡找不到「${q}」（上市未滿約 2 年的股票沒有收錄）。`; return; }
       selected = hit.sym; render(); $('detail').scrollIntoView({ behavior: 'smooth', block: 'start' }); return;
     }
     const s = $('pick').value.trim().toUpperCase().replace(/USDT$/, '');
