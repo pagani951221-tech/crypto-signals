@@ -38,6 +38,7 @@
   form label { display: grid; gap: 4px; font-size: 13px; color: var(--ink-2); font-weight: 500; }
   form label.coins { flex: 1 1 320px; }
   form label.num { width: 128px; }
+  form label.scanl { width: 172px; }
   input, select, button { font: inherit; color: var(--ink); }
   input:not([type=checkbox]), select { height: 40px; padding: 0 12px; border: 1px solid var(--line-strong); border-radius: 8px; background: #fff; font-size: 15px; width: 100%; }
   input:not([type=checkbox]):hover, select:hover { border-color: #8FA9C2; }
@@ -56,6 +57,12 @@
   #reason { margin-top: 8px; font-size: 17px; color: var(--ink-2); max-width: 70ch; }
   #status { margin-top: 10px; font-size: 14px; color: var(--ink-3); }
   .disclaim { margin-top: 4px; font-size: 13px; color: var(--ink-3); }
+  .pick { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; margin-top: 16px; }
+  .pick label { font-size: 14px; font-weight: 500; color: var(--ink-2); }
+  .pick input { width: 260px; max-width: 100%; height: 40px; }
+  .forecast.solo { grid-template-columns: minmax(0, 1fr); }
+  .empty { grid-column: 1 / -1; margin: 0; padding: 28px 24px; background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius); color: var(--ink-2); font-size: 16px; }
+  .empty b { display: block; color: var(--ink); font-size: 18px; margin-bottom: 4px; }
 
   /* 各幣預報格 ＋ 詳細 */
   .forecast { display: grid; grid-template-columns: minmax(0, 1fr) 400px; gap: 24px; align-items: start; }
@@ -162,7 +169,9 @@
     .band .issue, .band .next { margin-left: 0; font-size: 13px; }
     .sum th, .sum td { padding: 7px 6px; font-size: 13px; }
     .swipe { display: block; }
-    form label.num { width: calc(50% - 8px); }
+    form label.num, form label.scanl { width: calc(50% - 8px); }
+    .pick label { flex-basis: 100%; }
+    .pick input { flex: 1 1 0; width: auto; min-width: 0; }
     form button { flex: 1 1 100%; }
     form button.ghost { order: 1; }
     .grid { grid-template-columns: repeat(2, 1fr); }
@@ -184,8 +193,7 @@
 
 <div class="controls">
   <form id="f" class="wrap">
-    <label class="coins">幣種（Binance 代號，逗號分隔，以 USDT 計價）<input id="syms" autocomplete="off" spellcheck="false"></label>
-    <button type="button" class="ghost" id="top">換成成交量前 30 名</button>
+    <label class="scanl">掃描範圍<select id="scan"><option value="50">成交量前 50 名</option><option value="100" selected>成交量前 100 名</option><option value="150">成交量前 150 名</option></select></label>
     <label class="num">週期<select id="tf"></select></label>
     <label class="num">本金（USDT）<input id="cap" type="number" min="0" step="any" inputmode="decimal" placeholder="例如 1000"></label>
     <label class="num">每筆風險 %<input id="risk" type="number" min="0.1" max="10" step="0.1" value="1"></label>
@@ -200,6 +208,12 @@
     <h2 id="headline">讀取行情中…</h2>
     <p id="reason"></p>
     <p id="status"></p>
+    <div class="pick">
+      <label for="pick">查看其他幣</label>
+      <input id="pick" list="coinlist" autocomplete="off" spellcheck="false" placeholder="選擇或輸入代號，例如 PEPE">
+      <datalist id="coinlist"></datalist>
+      <button type="button" class="ghost" id="pickgo">查看</button>
+    </div>
     <p class="disclaim">歷史回測不保證未來獲利，這不是投資建議。</p>
   </section>
 
@@ -216,7 +230,7 @@
 
   <section class="accuracy" aria-labelledby="acc-h">
     <h2 id="acc-h">預報準確度</h2>
-    <p>每次打開都在 10 個主流幣上重新做逐年滾動驗證：每年 1 月 1 日只看當時已經結束的交易，合併結果明顯賺錢（至少 50 筆、t 值 ≥ 2）才允許那一年交易；允許年份的成績也要賺錢（t 值 ≥ 1），而且到現在仍然允許，才會給出訊號。</p>
+    <p>每次打開都在 10 個主流幣上重新做逐年滾動驗證（掃描範圍不影響這個判斷）：每年 1 月 1 日只看當時已經結束的交易，合併結果明顯賺錢（至少 50 筆、t 值 ≥ 2）才允許那一年交易；允許年份的成績也要賺錢（t 值 ≥ 1），而且到現在仍然允許，才會給出訊號。</p>
     <p class="exit" id="exit"></p>
     <div id="val"></div>
   </section>
@@ -241,7 +255,7 @@
 
 <script src="https://unpkg.com/lightweight-charts@4.2.0/dist/lightweight-charts.standalone.production.js"></script>
 <!-- 改 strategy.js 時把 v 加 1，瀏覽器才會抓新版而不是用快取 -->
-<script src="strategy.js?v=6"></script>
+<script src="strategy.js?v=7"></script>
 <script>
   const $ = id => document.getElementById(id);
   const pct = v => (v >= 0 ? '+' : '−') + Math.abs(v * 100).toFixed(1) + '%';
@@ -275,7 +289,7 @@
   function lineFor(r, item) {
     const { bars, live } = item, d = r.dir, p = r.pos, s = SIDE(d), o = r.own;
     const wait = (one, text) => ({ pri: 0, k: 'wait', label: '觀望', one, text });
-    if (d < 0 && !item.perp) return wait('無合約，不能放空', '<p>此幣在 Binance 沒有 USDT 永續合約，無法放空。</p>');
+    if (d < 0 && item.perp === false) return wait('無合約，不能放空', '<p>此幣在 Binance 沒有 USDT 永續合約，無法放空。</p>');
     if (!coinOk(o)) return wait('本幣歷史虧損，跳過', `<p>這條${s}規則在此幣歷史上是虧的，跳過。</p>`);
     if (r.state === 'wait') return wait('尚無訊號', `<p>尚未出現${s}訊號。訊號只在 K 線收盤後變動。</p>`);
     const f = freshness(p, d, live);
@@ -300,15 +314,21 @@
     return { ...top, lines };
   }
 
-  function renderGrid(shown) {
+  function renderGrid(shown, total) {
+    if (!shown.length) {
+      $('grid').innerHTML = [1, -1].some(d => val[d].pass)
+        ? `<p class="empty"><b>目前沒有可以操作的幣</b>掃描的 ${total} 個幣都還沒出現進場訊號，也沒有持有中的部位。想看某個幣的狀態，用上方「查看其他幣」。</p>`
+        : `<p class="empty"><b>這個週期不建議操作</b>規則沒有通過逐年滾動驗證，所以 ${total} 個幣都不會給訊號。</p>`;
+      return;
+    }
     $('grid').innerHTML = shown.map(({ item, j }) => `<button type="button" class="cell ${j.k}" data-sym="${item.sym}" aria-pressed="${item.sym === selected}">
       <span class="sym">${item.sym}<span class="px">${item.live ? price(item.live) : ''}</span></span>
       <span class="word">${j.label}</span><span class="one">${esc(j.one)}</span></button>`).join('');
   }
 
-  function renderDetail(shown) {
-    const hit = shown.find(s => s.item.sym === selected);
-    if (!hit) { $('detail').innerHTML = '<p class="meta">點一個幣看詳細建議。</p>'; return; }
+  function renderDetail(hit) {
+    $('detail').hidden = !hit; $('detail').parentElement.classList.toggle('solo', !hit);
+    if (!hit) return;
     const { item, j } = hit;
     if (item.err) { $('detail').innerHTML = `<div class="head"><h3>${item.sym}</h3></div><span class="badge">無資料</span><div class="say"><p>${esc(item.err)}</p></div>`; return; }
     const body = j.lines.length ? j.lines.map(l => l.text).join('') : '<p>這個週期的規則沒有通過滾動驗證，不建議依技術訊號操作。</p>';
@@ -319,19 +339,21 @@
       <div class="say">${body}</div>
       <h4>這個幣全部歷史的回測</h4>
       <div class="scroll"><table><tr><th>方向</th><th>平均每筆</th><th>勝率</th><th>盈虧比</th><th>最差一筆</th><th>筆數</th></tr>${rows}</table></div>
-      ${item.perp ? '' : '<p class="meta" style="margin-top:8px">此幣沒有永續合約，放空回測用固定資金費率估計。</p>'}`;
+      ${item.perp === false ? '<p class="meta" style="margin-top:8px">此幣沒有永續合約，放空回測用固定資金費率估計。</p>' : ''}`;
   }
 
   function renderHeadline(shown) {
     const tf = $('tf').value, passed = [1, -1].filter(d => val[d].pass);
-    if (!shown.length) { $('headline').textContent = '沒有取得任何資料'; $('reason').textContent = '請確認幣種代號或網路連線後再按更新。'; return; }
+    if (!shown.some(s => !s.item.err)) { $('headline').textContent = '沒有取得任何資料'; $('reason').textContent = '請確認網路連線後再按更新。'; return; }
     if (!passed.length) {
       $('headline').textContent = `今日行動預報：${TF[tf].label}不建議操作`;
       $('reason').textContent = `${TF[tf].label}的規則沒有通過逐年滾動驗證，照技術訊號買賣在歷史上是虧的，所有幣都建議觀望。` + (tf !== '1d' ? '要看有效的預報，請把週期切換到日線。' : '');
       return;
     }
     const act = shown.filter(s => s.j.pri === 3), hold = shown.filter(s => s.j.pri === 2);
-    const parts = [...act.map(s => `${s.item.sym} 可${s.j.label}`), ...hold.map(s => `${s.item.sym} ${s.j.label}`)];
+    const parts = act.length + hold.length > 5
+      ? [act.length && `${act.length} 個幣可進場`, hold.length && `${hold.length} 個持有中`].filter(Boolean)
+      : [...act.map(s => `${s.item.sym} 可${s.j.label}`), ...hold.map(s => `${s.item.sym} ${s.j.label}`)];
     const rest = shown.length - act.length - hold.length;
     $('headline').textContent = '今日行動預報：' + (parts.length ? parts.join('、') + (rest ? '，其餘觀望' : '') : '全部觀望');
     $('reason').textContent = act.length ? '點有訊號的幣看進場、止損、止盈與建議倉位。' : hold.length ? '持有中的部位照原本的止損止盈處理；沒有新的進場訊號。' : `規則仍然有效，只是還沒有任何幣出現進場訊號。訊號只在每根 K 線收盤後變動。`;
@@ -374,13 +396,31 @@
     }).join('');
   }
 
-  async function one(sym, tf) {
+  // 驗證用的 10 個幣抓完整歷史與資金費率；其餘的幣只抓最近 3000 根 K 線，資金費率等放空規則通過時才抓
+  async function one(sym, tf, prices) {
+    const full = BASKET.includes(sym);
     try {
-      const [bars, live, ev] = await Promise.all([fetchBars(sym + 'USDT', tf),
-        livePrice(sym + 'USDT').catch(() => null), fetchFunding(sym + 'USDT').catch(() => [])]);
+      const [bars, ev] = await Promise.all([fetchBars(sym + 'USDT', tf, full ? TF[tf].pages : Math.min(3, TF[tf].pages)),
+        full ? fetchFunding(sym + 'USDT').catch(() => []) : null]);
       if (bars.length < 500) throw new Error(`${sym}：歷史資料不足 500 根 K 線，無法回測`);
-      return { sym, bars, perp: ev.length > 0, fund: fundingFn(ev), live: live ?? bars.at(-1).c };
+      return { sym, bars, perp: ev ? ev.length > 0 : null, fund: fundingFn(ev || []), live: prices[sym] ?? bars.at(-1).c };
     } catch (e) { return { sym, err: e.message }; }
+  }
+
+  // 最多 n 個請求同時進行，避免一次打太多被交易所限流
+  async function pool(list, n, fn) {
+    const out = []; let i = 0;
+    await Promise.all(Array.from({ length: n }, async () => { while (i < list.length) { const k = i++; out[k] = await fn(list[k]); } }));
+    return out;
+  }
+
+  // 成交量排行記 12 小時，不必每次重算
+  async function scanList(n) {
+    const key = 'top' + n;
+    try { const c = JSON.parse(localStorage.getItem(key)); if (c && Date.now() - c.t < 12 * 36e5) return c.list; } catch {}
+    const list = await topCoins(n);
+    try { localStorage.setItem(key, JSON.stringify({ t: Date.now(), list })); } catch {}
+    return list;
   }
 
   // 成交量前 n 名：排除穩定幣、黃金與槓桿代幣，並要求至少 18 個月歷史（新上市的股票代幣等資料不夠回測）
@@ -391,8 +431,8 @@
     const ranked = (await res.json()).filter(t => t.symbol.endsWith('USDT'))
       .map(t => ({ b: t.symbol.slice(0, -4), v: +t.quoteVolume }))
       .filter(t => /^[A-Z0-9]{1,15}$/.test(t.b) && !NOT_COIN.test(t.b) && !/(UP|DOWN|BULL|BEAR)$/.test(t.b))
-      .sort((a, b) => b.v - a.v).slice(0, n * 3);
-    const months = await Promise.all(ranked.map(t => fetch(`${API}/klines?symbol=${t.b}USDT&interval=1M&limit=18`).then(r => r.ok ? r.json() : []).catch(() => [])));
+      .sort((a, b) => b.v - a.v).slice(0, n + 60);
+    const months = await pool(ranked, 8, t => fetch(`${API}/klines?symbol=${t.b}USDT&interval=1M&limit=18`).then(r => r.ok ? r.json() : []).catch(() => []));
     return ranked.filter((t, i) => months[i].length >= 18).slice(0, n).map(t => t.b);
   }
 
@@ -448,13 +488,15 @@
 
   // 畫出各幣預報與詳細，回傳目前可進場的通知
   function render() {
-    const shown = items.filter(i => i.show).map(item => ({ item, j: judge(item) }))
-      .sort((a, b) => (b.j.pri ?? -2) - (a.j.pri ?? -2)); // 有訊號的排前面，其餘照輸入順序
-    if (!shown.some(s => s.item.sym === selected))
-      selected = (shown.find(s => s.j.pri === 3) || shown.find(s => s.j.pri === 2) || shown[0] || {}).item?.sym ?? null;
-    renderHeadline(shown); renderGrid(shown); renderDetail(shown); drawChart();
+    const all = items.filter(i => i.show).map(item => ({ item, j: judge(item) }))
+      .sort((a, b) => (b.j.pri ?? -2) - (a.j.pri ?? -2)); // 有訊號的排前面，其餘照成交量順序
+    const shown = all.filter(s => s.j.pri >= 2); // 格子只放可進場與持有中的幣
+    if (!items.some(i => i.sym === selected)) selected = shown[0]?.item.sym ?? null;
+    const sel = items.find(i => i.sym === selected);
+    renderHeadline(all); renderGrid(shown, all.filter(s => !s.item.err).length); renderDetail(sel && { item: sel, j: judge(sel) }); drawChart();
+    $('coinlist').innerHTML = all.filter(s => !s.item.err).map(s => `<option value="${s.item.sym}">`).join('');
     const tf = $('tf').value;
-    return shown.flatMap(({ item, j }) => j.lines.filter(l => l.alert).map(l => ({ key: `${item.sym}|${tf}|${l.alert.key}`, title: `${item.sym} ${TF[tf].label}`, body: l.alert.body })));
+    return all.flatMap(({ item, j }) => j.lines.filter(l => l.alert).map(l => ({ key: `${item.sym}|${tf}|${l.alert.key}`, title: `${item.sym} ${TF[tf].label}`, body: l.alert.body })));
   }
 
   // 用已下載的資料、目前的盈虧比設定重算回測與驗證
@@ -469,19 +511,35 @@
   }
 
   function savePrefs() {
-    try { localStorage.setItem('prefs', JSON.stringify({ syms: $('syms').value, tf: $('tf').value, cap: $('cap').value, risk: $('risk').value, rr: $('rr').value, auto: $('auto').checked })); } catch {}
+    try { localStorage.setItem('prefs', JSON.stringify({ scan: $('scan').value, tf: $('tf').value, cap: $('cap').value, risk: $('risk').value, rr: $('rr').value, auto: $('auto').checked })); } catch {}
   }
 
   async function run(fromTimer = false) {
     const tf = $('tf').value;
-    const syms = [...new Set($('syms').value.toUpperCase().split(/[\s,，]+/).filter(s => /^[A-Z0-9]{1,15}$/.test(s)))];
+    const N = +$('scan').value;
     savePrefs();
     $('go').disabled = true;
-    $('status').textContent = '讀取行情、資金費率並回測中…（第一次開啟要抓完整資金費率歷史，約需 10～20 秒）';
-    items = await Promise.all([...new Set([...syms, ...BASKET])].map(s => one(s, tf)));
+    $('status').textContent = '讀取成交量排行…';
+    let scan, note = '';
+    try { scan = await scanList(N); } catch { scan = BASKET.slice(); note = ' 取不到成交量排行，這次只掃描 10 個主流幣。'; }
+    const prices = await allPrices().catch(() => ({}));
+    const list = [...new Set([...BASKET, ...scan])];
+    let done = 0;
+    items = await pool(list, 8, async s => {
+      const it = await one(s, tf, prices);
+      $('status').textContent = `掃描中… ${++done} / ${list.length}（第一次開啟或切換週期較久）`;
+      return it;
+    });
     chartKey = null; // 重新整理後一律重新連線即時串流
-    items.forEach(i => i.show = syms.includes(i.sym));
-    const alerts = compute();
+    items.forEach(i => i.show = scan.includes(i.sym));
+    let alerts = compute();
+    // 放空規則通過時，才替其餘的幣補抓資金費率（確認有沒有合約、並計入真實費率）
+    const need = val[-1].pass ? items.filter(i => i.bars && i.perp === null) : [];
+    if (need.length) {
+      $('status').textContent = '放空規則通過，補抓資金費率中…';
+      await pool(need, 4, async i => { const ev = await fetchFunding(i.sym + 'USDT').catch(() => []); i.perp = ev.length > 0; i.fund = fundingFn(ev); });
+      alerts = compute();
+    }
     $('go').disabled = false;
     // 只在自動更新時通知「這次才新出現」的訊號；第一次載入或手動更新不通知
     if (fromTimer && seen && 'Notification' in window && Notification.permission === 'granted')
@@ -491,7 +549,11 @@
     const T = Math.max(0, ...items.map(r => r.bars ? r.bars.at(-1).T : 0));
     const missing = BASKET.length - items.filter(i => BASKET.includes(i.sym) && i.runs).length;
     $('issue').textContent = T ? `${TF[tf].label}預報 · 依 ${new Date(T + 1).toLocaleString('zh-TW', { month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit' })} 收盤發布` : '尚未取得資料';
-    $('status').textContent = '價格為即時價，點任一個幣可看詳細建議與回測。' + (missing ? ` 驗證用的幣有 ${missing} 個取不到資料，驗證結果只含其餘的幣。` : '');
+    const scanned = items.filter(i => i.show && i.bars).length, skipped = items.filter(i => i.show && i.err).length;
+    const act = items.filter(i => i.show && i.runs && judge(i).pri >= 2).length;
+    $('status').textContent = `掃描成交量前 ${N} 名，共 ${scanned} 個幣，${act} 個有機會操作。價格為即時價。`
+      + (skipped ? ` ${skipped} 個幣資料不足，已略過。` : '') + note
+      + (missing ? ` 驗證用的幣有 ${missing} 個取不到資料，驗證結果只含其餘的幣。` : '');
     schedule();
   }
 
@@ -507,13 +569,24 @@
 
   $('tf').innerHTML = Object.entries(TF).map(([k, v]) => `<option value="${k}">${v.label}</option>`).join('');
   let p = {}; try { p = JSON.parse(localStorage.getItem('prefs')) || {}; } catch {}
-  $('syms').value = p.syms || BASKET.join(',');
-  $('top').onclick = async () => {
-    $('top').disabled = true; $('top').textContent = '讀取排行中…';
-    try { $('syms').value = (await topCoins(30)).join(','); run(); }
-    catch (e) { $('status').textContent = e.message + '，先用預設的 10 個主流幣。'; run(); }
-    $('top').disabled = false; $('top').textContent = '換成成交量前 30 名';
-  };
+  if (p.scan) $('scan').value = p.scan;
+  // 查看其他幣：已掃描的直接顯示；沒掃到的代號當下才單獨下載
+  async function pick() {
+    const s = $('pick').value.trim().toUpperCase().replace(/USDT$/, '');
+    if (!/^[A-Z0-9]{1,15}$/.test(s) || $('pickgo').disabled) return;
+    if (!items.some(i => i.sym === s)) {
+      $('pickgo').disabled = true; $('pickgo').textContent = '讀取中…';
+      const it = await one(s, $('tf').value, await allPrices().catch(() => ({})));
+      if (it.bars) it.runs = [1, -1].map(d => runRule(it.bars, d, it.fund, exitFor($('rr').value)));
+      items.push(it);
+      $('pickgo').disabled = false; $('pickgo').textContent = '查看';
+    }
+    selected = s; render();
+    $('detail').scrollIntoView({ behavior: 'smooth', block: 'start' });
+  }
+  $('pickgo').onclick = pick;
+  $('pick').onkeydown = e => { if (e.key === 'Enter') { e.preventDefault(); pick(); } };
+  $('pick').onchange = () => { if (items.some(i => i.sym === $('pick').value.trim().toUpperCase())) pick(); };
   if (p.tf in TF) $('tf').value = p.tf;
   if (p.cap) $('cap').value = p.cap;
   if (p.risk) $('risk').value = p.risk;
@@ -522,6 +595,7 @@
   $('f').onsubmit = e => { e.preventDefault(); run(); };
   $('tf').onchange = () => run();
   $('cap').oninput = $('risk').oninput = () => { savePrefs(); render(); };
+  $('scan').onchange = () => run();
   $('rr').onchange = () => { if (items.length) seen = new Set(compute().map(n => n.key)); savePrefs(); };
   $('auto').onchange = async () => {
     if ($('auto').checked && 'Notification' in window && Notification.permission === 'default') await Notification.requestPermission();
@@ -534,5 +608,5 @@
     render();
     if (matchMedia('(max-width: 1020px)').matches) $('detail').scrollIntoView({ behavior: 'smooth', block: 'start' });
   };
-  if (p.syms) run(); else $('top').click(); // 第一次開啟預設看成交量前 30 名
+  run();
 </script>

@@ -217,7 +217,7 @@ async function klines(symbol, tf, q) {
 
 // 已收盤的 K 線記在記憶體裡；之後只補抓最後一根之後的（自動更新時不必重抓整段歷史）
 const barCache = {};
-async function fetchBars(symbol, tf = '1d') {
+async function fetchBars(symbol, tf = '1d', pages = TF[tf].pages) {
   const key = `${symbol}|${tf}`, old = barCache[key];
   let bars;
   const fresh = old && await klines(symbol, tf, `&startTime=${old.at(-1).t + 1}`);
@@ -225,7 +225,7 @@ async function fetchBars(symbol, tf = '1d') {
   else {
     bars = [];
     let end;
-    for (let p = 0; p < TF[tf].pages; p++) {
+    for (let p = 0; p < pages; p++) {
       const k = await klines(symbol, tf, end ? `&endTime=${end}` : '');
       if (!k.length) break;
       bars = k.concat(bars);
@@ -252,6 +252,13 @@ async function fetchFunding(symbol) {
     if (k.length < 1000) break;
   }
   return ev;
+}
+
+// 全部交易對的即時價，一次請求；回傳 { BTC: 76000, ... }（只取 USDT 計價）
+async function allPrices() {
+  const res = await fetch(`${API}/ticker/price`);
+  if (!res.ok) throw new Error('取不到即時價');
+  return Object.fromEntries((await res.json()).filter(t => t.symbol.endsWith('USDT')).map(t => [t.symbol.slice(0, -4), +t.price]));
 }
 
 async function livePrice(symbol) {
