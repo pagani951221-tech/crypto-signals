@@ -200,6 +200,28 @@ function sizing(capital, riskPct, entry, stop) {
   return { qty, value: qty * entry, loss: capital * riskPct, lev: qty * entry / capital };
 }
 
+// 下單規劃：先用固定風險決定倉位，槓桿只開到「夠用」，而且強平價一定要在止損之外
+// d＝1 做多、-1 放空；avgR＝歷史上每冒 1 元風險（打到止損的虧損）平均賺幾元，用來估預期盈虧
+const LIQ_BUFFER = 0.01; // 維持保證金與手續費的緩衝
+function plan(capital, riskPct, entry, stop, target, d, avgR) {
+  const dist = Math.abs(entry - stop) / entry;
+  const maxLev = Math.max(1, Math.floor(1 / (dist + LIQ_BUFFER)));
+  let value = capital * riskPct / dist;
+  const capped = value > capital * maxLev; // 要的倉位大到會先被強平，只好縮小
+  if (capped) value = capital * maxLev;
+  const lev = Math.max(1, Math.ceil(value / capital - 1e-9));
+  const cost = value * COST;
+  return {
+    value, lev, maxLev, capped, cost,
+    qty: value / entry,
+    margin: value / lev,
+    liq: lev > 1 ? entry * (1 - d / lev + d * LIQ_BUFFER / 2) : null, // 逐倉約略強平價
+    loss: value * dist + cost,                                  // 打到止損
+    gain: value * Math.abs(target - entry) / entry - cost,      // 打到止盈
+    expect: value * dist * avgR,                                // 依歷史平均（以風險為單位，止損遠近都換算得對）
+  };
+}
+
 // 訊號出現後價格又動了多少：stop / target（已碰到，作廢）、late（已走完一半止盈距離，不追）、ok
 function freshness(pos, d, live) {
   if (d * (live - pos.stop) <= 0) return 'stop';
@@ -301,7 +323,7 @@ async function livePrice(symbol) {
 
 if (typeof module !== 'undefined') {
   module.exports = { sma, ema, rsi, indicators, candidates, makeCand, backtest, stats, runRule, walkForward, sizing, freshness, coinOk, exitFor,
-    fetchBars, fundingFn, fetchFunding, allPrices, topCoins, ourbitCoins, pool, BASKET, TF, MAX_HOLD };
+    plan, fetchBars, fundingFn, fetchFunding, allPrices, topCoins, ourbitCoins, pool, BASKET, TF, MAX_HOLD };
 
   if (require.main === module) (async () => {
     const assert = require('assert');
@@ -335,6 +357,14 @@ if (typeof module !== 'undefined') {
     r = run(flat(), -1, 225); assert.deepStrictEqual([r.state, r.pos.stop, r.pos.target], ['hold', 102, 98]);
     const s = stats([{ ret: 0.1 }, { ret: 0.1 }, { ret: -0.05 }]);
     near(s.payoff, 2); near(s.be, 1 / 3); near(s.win, 2 / 3);
+    let q = plan(1000, 0.01, 100, 90, 120, 1, 0.3); // 止損 10%：倉位 100、不用槓桿；每冒 1 元平均賺 0.3 元
+    near(q.value, 100); assert.strictEqual(q.lev, 1); near(q.loss, 10 + 100 * COST); near(q.gain, 20 - 100 * COST); near(q.expect, 3);
+    q = plan(1000, 0.01, 100, 99.5, 101, 1, 0);       // 止損 0.5%：倉位 2000、2 倍、強平價 50.5 在止損之外
+    near(q.value, 2000); assert.strictEqual(q.lev, 2); near(q.margin, 1000); near(q.liq, 50.5); assert.ok(!q.capped);
+    q = plan(1000, 1, 100, 90, 120, 1, 0);            // 風險 100%：要 10 倍，但強平會先到，只能 9 倍
+    assert.deepStrictEqual([q.capped, q.lev, q.maxLev], [true, 9, 9]); near(q.value, 9000); assert.ok(q.liq < 90);
+    q = plan(1000, 0.05, 100, 102, 96, -1, 0);        // 放空：強平價在止損之上
+    assert.ok(q.lev === 3 && q.liq > 102);
     const z = sizing(1000, 0.01, 100, 98);
     assert.deepStrictEqual([z.qty, z.value, z.loss, z.lev], [5, 500, 10, 0.5]);
     const L = { px: 100, stop: 98, target: 102 }, S = { px: 100, stop: 102, target: 98 };

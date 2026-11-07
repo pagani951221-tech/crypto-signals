@@ -94,6 +94,16 @@
   .levels dd { margin: 0; font-size: 17px; font-weight: 700; }
   .levels dd small { display: block; font-size: 12px; font-weight: 400; color: var(--ink-3); }
   .size { background: var(--office-tint); border-radius: 8px; padding: 10px 12px; }
+  .plan { background: var(--office-tint); border-radius: 8px; padding: 12px 14px 10px; }
+  .plan h4 { margin: 0 0 8px; font-size: 14px; color: var(--ink); }
+  .plan dl { margin: 0; display: grid; grid-template-columns: 1fr 1fr; gap: 10px 12px; }
+  .plan .wide { grid-column: 1 / -1; }
+  .plan dt { font-size: 12px; color: var(--ink-2); }
+  .plan dd { margin: 0; font-size: 16px; font-weight: 700; }
+  .plan dd small { display: block; font-size: 12px; font-weight: 400; color: var(--ink-2); }
+  .plan dd.neg { color: #7A3410; } .plan dd.pos { color: var(--office); }
+  .plan .alert { margin-top: 10px; }
+  .plan .meta { margin-top: 8px; }
   .alert { background: var(--warn-tint); color: #6B3B08; border-radius: 8px; padding: 10px 12px; }
   .meta { font-size: 13px; color: var(--ink-3); }
   .detail h4 { margin: 20px 0 6px; font-size: 14px; color: var(--ink-2); }
@@ -196,7 +206,7 @@
     <label class="scanl">交易所<select id="ex"><option value="ourbit" selected>只看 Ourbit 有的幣</option><option value="all">不限交易所</option></select></label>
     <label class="scanl">掃描範圍<select id="scan"><option value="50">成交量前 50 名</option><option value="100" selected>成交量前 100 名</option><option value="150">成交量前 150 名</option></select></label>
     <label class="num">週期<select id="tf"></select></label>
-    <label class="num">本金（USDT）<input id="cap" type="number" min="0" step="any" inputmode="decimal" placeholder="例如 1000"></label>
+    <label class="num">目前資金（USDT）<input id="cap" type="number" min="0" step="any" inputmode="decimal" placeholder="例如 1000"></label>
     <label class="num">每筆風險 %<input id="risk" type="number" min="0.1" max="10" step="0.1" value="1"></label>
     <label class="num">盈虧比（倍）<input id="rr" type="number" min="1.5" max="5" step="0.1" value="2"></label>
     <button id="go">更新</button>
@@ -256,7 +266,7 @@
 
 <script src="https://unpkg.com/lightweight-charts@4.2.0/dist/lightweight-charts.standalone.production.js"></script>
 <!-- 改 strategy.js 時把 v 加 1，瀏覽器才會抓新版而不是用快取 -->
-<script src="strategy.js?v=10"></script>
+<script src="strategy.js?v=12"></script>
 <script>
   const $ = id => document.getElementById(id);
   const pct = v => (v >= 0 ? '+' : '−') + Math.abs(v * 100).toFixed(1) + '%';
@@ -272,13 +282,26 @@
   const STAT_HEAD = '<th>平均每筆</th><th>勝率</th><th>實際盈虧比</th><th>兩平勝率</th><th>t 值</th><th>筆數</th>';
   let items = [], val = {}, seen = null, timer, selected = null;
 
-  function sizeText(live, p, d) {
+  // 下單規劃：投入多少、槓桿幾倍、打到止損／止盈各賺賠多少、依歷史平均的預期盈虧
+  function sizeText(live, p, d, r) {
     const cap = +$('cap').value, risk = +$('risk').value / 100;
-    if (!(cap > 0 && risk > 0)) return '<p class="size">在上方填入本金，就會算出建議倉位。</p>';
-    const z = sizing(cap, risk, live, p.stop);
-    const lev = d < 0 || z.lev > 1 ? `，合約約需 ${Math.max(1, Math.ceil(z.lev))} 倍槓桿` : '';
+    if (!(cap > 0 && risk > 0)) return '<p class="size">在上方填入目前資金，就會算出投入金額、槓桿與預期盈虧。</p>';
+    const z = plan(cap, risk, live, p.stop, p.target, d, val[d].avgR);
     const usdt = v => v.toLocaleString('en-US', { maximumFractionDigits: 2 });
-    return `<p class="size"><b>建議倉位：${z.qty.toLocaleString('en-US', { maximumSignificantDigits: 4 })} 枚（約 ${usdt(z.value)} USDT）</b><br>打到止損約虧 ${usdt(z.loss)} USDT（本金的 ${risk * 100}%）${lev}。</p>`;
+    const ofCap = v => (v / cap * 100).toFixed(1) + '%';
+    const levText = z.lev === 1 ? (d > 0 ? '不用槓桿' : '1 倍') : `${z.lev} 倍（逐倉）`;
+    return `<div class="plan">
+      <h4>下單規劃（目前資金 ${usdt(cap)} USDT）</h4>
+      <dl>
+        <div><dt>投入（倉位價值）</dt><dd>${usdt(z.value)} USDT<small>${z.qty.toLocaleString('en-US', { maximumSignificantDigits: 4 })} 枚，資金的 ${ofCap(z.value)}</small></dd></div>
+        <div><dt>建議槓桿</dt><dd>${levText}<small>${z.lev > 1 ? `保證金 ${usdt(z.margin)} USDT，強平價約 ${price(z.liq)}` : `${d > 0 ? '現貨直接買' : '放空要用合約'}，占用資金 ${usdt(z.margin)} USDT`}</small></dd></div>
+        <div><dt>打到止損</dt><dd class="neg">−${usdt(z.loss)} USDT<small>資金的 −${ofCap(z.loss)}</small></dd></div>
+        <div><dt>打到止盈</dt><dd class="pos">+${usdt(z.gain)} USDT<small>資金的 +${ofCap(z.gain)}</small></dd></div>
+        <div class="wide"><dt>預期盈虧（歷史上每冒 1 元風險，平均${val[d].avgR >= 0 ? '賺' : '賠'} ${Math.abs(val[d].avgR).toFixed(2)} 元）</dt><dd>${z.expect >= 0 ? '+' : '−'}${usdt(Math.abs(z.expect))} USDT<small>資金的 ${pct(z.expect / cap)}；這是長期平均，單筆不是賺到止盈就是賠到止損</small></dd></div>
+      </dl>
+      ${z.capped ? `<p class="alert">照每筆風險 ${risk * 100}% 需要的槓桿太高，強平價會落在止損之前，所以倉位已縮小到 ${z.maxLev} 倍上限。</p>` : ''}
+      <p class="meta">已含手續費與滑價約 ${usdt(z.cost)} USDT。槓桿只是少放一點保證金，不會改變風險：風險由倉位大小和止損決定。${z.lev > 1 ? '強平價是逐倉的約略值，下單前請以交易所顯示為準。' : ''}</p>
+    </div>`;
   }
 
   const levels = p => `<dl class="levels">
@@ -298,7 +321,7 @@
       const head = `<p>最新 K 線收盤出現${s}訊號，${MAX_HOLD} 根 K 線內兩邊都沒碰到就市價出場。</p>${levels(p)}`;
       if (f !== 'ok') return { pri: 1, k: 'wait', label: '觀望', one: '訊號已過時，不追', text: `${head}<p class="alert">即時價 ${price(live)} ${FRESH[f]}，不建議進場。</p>` };
       return { pri: 3, k: d > 0 ? 'long' : 'short', label: s, one: `止損 ${price(p.stop)}
-止盈 ${price(p.target)}`, text: head + sizeText(live, p, d),
+止盈 ${price(p.target)}`, text: head + sizeText(live, p, d, r),
         alert: { key: `${d}|${bars.at(-1).t}`, body: `${s}　進場約 ${price(live)}　止損 ${price(p.stop)}　止盈 ${price(p.target)}` } };
     }
     const now = `<p>規則已在 ${when(bars[p.in].t)} ${s}，即時價 ${price(live)}（${pct(d * (live / p.px - 1))}）。</p>${levels(p)}`;
@@ -488,7 +511,14 @@
     if (+$('rr').value !== rr) $('rr').value = rr; // 低於 1.5 或空白時改回有效值
     for (const i of items) if (i.bars) i.runs = [1, -1].map(d => runRule(i.bars, d, i.fund, ex));
     const pooled = items.filter(i => i.show && i.runs); // 掃描到的所有幣一起驗證（從選單另外查看的幣不算）
-    for (const d of [1, -1]) val[d] = walkForward(pooled.map(i => i.runs.find(r => r.dir === d)));
+    for (const d of [1, -1]) {
+      val[d] = walkForward(pooled.map(i => i.runs.find(r => r.dir === d)));
+      // 每冒 1 元風險平均賺幾元（只算允許交易的年份，和滾動成績一致）
+      const on = new Set(val[d].rows.filter(r => r.on).map(r => r.y));
+      const rs = pooled.flatMap(i => i.runs.find(r => r.dir === d).trades).filter(t => on.has(new Date(t.t).getUTCFullYear()))
+        .map(t => t.ret / (Math.abs(t.px - t.stop) / t.px));
+      val[d].avgR = rs.length ? rs.reduce((s, v) => s + v, 0) / rs.length : 0;
+    }
     renderVal(ex);
     return render();
   }
