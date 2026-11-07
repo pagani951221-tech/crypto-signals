@@ -200,6 +200,22 @@ function sizing(capital, riskPct, entry, stop) {
   return { qty, value: qty * entry, loss: capital * riskPct, lev: qty * entry / capital };
 }
 
+// 持有多久（以 K 線根數）：全部交易的中位數，以及碰到止盈、碰到止損時各自的中位數；timeShare＝持有到期才出場的比例
+function holdStats(trades) {
+  const med = a => { if (!a.length) return null; const s = [...a].sort((x, y) => x - y), m = s.length >> 1; return s.length % 2 ? s[m] : (s[m - 1] + s[m]) / 2; };
+  const len = t => t.out - t.in + 1;
+  return {
+    n: trades.length,
+    med: med(trades.map(len)),
+    target: med(trades.filter(t => t.why === 'target').map(len)),
+    stop: med(trades.filter(t => t.why === 'stop').map(len)),
+    timeShare: trades.length ? trades.filter(t => t.why === 'time').length / trades.length : 0,
+  };
+}
+
+// 最晚出場時間：進場那根開盤後第 MAX_HOLD 根收盤（pos.in 等於 K 線數時表示下一根才進場）
+const deadline = (bars, pos) => (pos.in < bars.length ? bars[pos.in].t : bars.at(-1).t + (bars.at(-1).t - bars.at(-2).t)) + MAX_HOLD * (bars[1].t - bars[0].t);
+
 // 下單規劃：先用固定風險決定倉位，槓桿只開到「夠用」，而且強平價一定要在止損之外
 // d＝1 做多、-1 放空；avgR＝歷史上每冒 1 元風險（打到止損的虧損）平均賺幾元，用來估預期盈虧
 const LIQ_BUFFER = 0.01; // 維持保證金與手續費的緩衝
@@ -336,7 +352,7 @@ async function livePrice(symbol) {
 
 if (typeof module !== 'undefined') {
   module.exports = { sma, ema, rsi, indicators, candidates, makeCand, backtest, stats, runRule, walkForward, sizing, freshness, coinOk, exitFor,
-    plan, fetchBars, fundingFn, fetchFunding, allPrices, topCoins, ourbitCoins, pool, BASKET, TF, MAX_HOLD };
+    plan, holdStats, deadline, fetchBars, fundingFn, fetchFunding, allPrices, topCoins, ourbitCoins, pool, BASKET, TF, MAX_HOLD };
 
   if (require.main === module) (async () => {
     const assert = require('assert');
@@ -378,6 +394,10 @@ if (typeof module !== 'undefined') {
     assert.deepStrictEqual([q.capped, q.lev, q.maxLev], [true, 9, 9]); near(q.value, 9000); assert.ok(q.liq < 90);
     q = plan(1000, 0.05, 100, 102, 96, -1, 0);        // 放空：強平價在止損之上
     assert.ok(q.lev === 3 && q.liq > 102);
+    const h = holdStats([{ in: 1, out: 3, why: 'target' }, { in: 1, out: 1, why: 'stop' }, { in: 1, out: 20, why: 'time' }]);
+    assert.deepStrictEqual([h.med, h.target, h.stop], [3, 3, 1]); near(h.timeShare, 1 / 3);
+    const bb = Array.from({ length: 5 }, (_, i) => ({ t: i * 864e5 }));
+    assert.strictEqual(deadline(bb, { in: 5 }), (5 + MAX_HOLD) * 864e5); assert.strictEqual(deadline(bb, { in: 2 }), (2 + MAX_HOLD) * 864e5);
     const z = sizing(1000, 0.01, 100, 98);
     assert.deepStrictEqual([z.qty, z.value, z.loss, z.lev], [5, 500, 10, 0.5]);
     const L = { px: 100, stop: 98, target: 102 }, S = { px: 100, stop: 102, target: 98 };

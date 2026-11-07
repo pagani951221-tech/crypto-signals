@@ -93,6 +93,8 @@
   .levels dt { font-size: 12px; color: var(--ink-3); }
   .levels dd { margin: 0; font-size: 17px; font-weight: 700; }
   .levels dd small { display: block; font-size: 12px; font-weight: 400; color: var(--ink-3); }
+  .holdline { font-size: 14px; color: var(--ink-2); background: var(--ground); border-radius: 8px; padding: 8px 10px; }
+  .holdline b { color: var(--ink); }
   .size { background: var(--office-tint); border-radius: 8px; padding: 10px 12px; }
   .plan { background: var(--office-tint); border-radius: 8px; padding: 12px 14px 10px; }
   .plan h4 { margin: 0 0 8px; font-size: 14px; color: var(--ink); }
@@ -266,7 +268,7 @@
 
 <script src="https://unpkg.com/lightweight-charts@4.2.0/dist/lightweight-charts.standalone.production.js"></script>
 <!-- 改 strategy.js 時把 v 加 1，瀏覽器才會抓新版而不是用快取 -->
-<script src="strategy.js?v=14"></script>
+<script src="strategy.js?v=15"></script>
 <script>
   const $ = id => document.getElementById(id);
   const pct = v => (v >= 0 ? '+' : '−') + Math.abs(v * 100).toFixed(1) + '%';
@@ -304,6 +306,16 @@
     </div>`;
   }
 
+  // K 線根數換成天或小時
+  const dur = n => { if (n == null) return '—'; const ms = n * TF[$('tf').value].ms; return ms >= 864e5 ? `${+(ms / 864e5).toFixed(1)} 天` : `${+(ms / 36e5).toFixed(1)} 小時`; };
+  const holdText = (d, bars, p, held) => {
+    const h = val[d].hold;
+    if (!h || !h.n) return '';
+    return `<p class="holdline"><b>預計持有：</b>${held != null ? `已持有 ${dur(held)}；` : ''}歷史上通常 <b>${dur(h.med)}</b> 結束`
+      + `（碰到止盈的一般 ${dur(h.target)}、碰到止損的一般 ${dur(h.stop)}，${(h.timeShare * 100).toFixed(0)}% 持有到期才出場）。`
+      + `最長 ${MAX_HOLD} 根 K 線，最晚 <b>${when(deadline(bars, p))}</b> 收盤出場。</p>`;
+  };
+
   const levels = p => `<dl class="levels">
       <div><dt>進場</dt><dd>${price(p.px)}</dd></div>
       <div><dt>止損</dt><dd>${price(p.stop)}<small>${pct(p.stop / p.px - 1)}</small></dd></div>
@@ -318,13 +330,13 @@
     if (r.state === 'wait') return wait('尚無訊號', `<p>尚未出現${s}訊號。訊號只在 K 線收盤後變動。</p>`);
     const f = freshness(p, d, live);
     if (r.state === 'enter') {
-      const head = `<p>最新 K 線收盤出現${s}訊號，${MAX_HOLD} 根 K 線內兩邊都沒碰到就市價出場。</p>${levels(p)}`;
+      const head = `<p>最新 K 線收盤出現${s}訊號，${MAX_HOLD} 根 K 線內兩邊都沒碰到就市價出場。</p>${levels(p)}${holdText(d, bars, p)}`;
       if (f !== 'ok') return { pri: 1, k: 'wait', label: '觀望', one: '訊號已過時，不追', text: `${head}<p class="alert">即時價 ${price(live)} ${FRESH[f]}，不建議進場。</p>` };
       return { pri: 3, k: d > 0 ? 'long' : 'short', label: s, one: `止損 ${price(p.stop)}
 止盈 ${price(p.target)}`, text: head + sizeText(live, p, d, r),
         alert: { key: `${d}|${bars.at(-1).t}`, body: `${s}　進場約 ${price(live)}　止損 ${price(p.stop)}　止盈 ${price(p.target)}` } };
     }
-    const now = `<p>規則已在 ${when(bars[p.in].t)} ${s}，即時價 ${price(live)}（${pct(d * (live / p.px - 1))}）。</p>${levels(p)}`;
+    const now = `<p>規則已在 ${when(bars[p.in].t)} ${s}，即時價 ${price(live)}（${pct(d * (live / p.px - 1))}）。</p>${levels(p)}${holdText(d, bars, p, bars.length - p.in)}`;
     if (f === 'stop' || f === 'target') return { pri: 1, k: 'wait', label: '觀望', one: `已到${f === 'stop' ? '止損' : '止盈'}位`, text: `${now}<p class="alert">即時價已到${f === 'stop' ? '止損' : '止盈'}位，這筆應已出場，等下一次訊號。</p>` };
     return { pri: 2, k: 'hold', label: d > 0 ? '持有多單' : '持有空單', one: `${pct(d * (live / p.px - 1))} 持有中`, text: `${now}<p>已進場者照這組止損止盈續抱；未進場者不追價，等下一次訊號。</p>` };
   }
@@ -523,9 +535,10 @@
       val[d] = walkForward(pooled.map(i => i.runs.find(r => r.dir === d)));
       // 每冒 1 元風險平均賺幾元（只算允許交易的年份，和滾動成績一致）
       const on = new Set(val[d].rows.filter(r => r.on).map(r => r.y));
-      const rs = pooled.flatMap(i => i.runs.find(r => r.dir === d).trades).filter(t => on.has(new Date(t.t).getUTCFullYear()))
-        .map(t => t.ret / (Math.abs(t.px - t.stop) / t.px));
+      const trs = pooled.flatMap(i => i.runs.find(r => r.dir === d).trades).filter(t => on.has(new Date(t.t).getUTCFullYear()));
+      const rs = trs.map(t => t.ret / (Math.abs(t.px - t.stop) / t.px));
       val[d].avgR = rs.length ? rs.reduce((s, v) => s + v, 0) / rs.length : 0;
+      val[d].hold = holdStats(trs); // 同樣只算允許交易的年份
     }
     renderVal(ex);
     return render();

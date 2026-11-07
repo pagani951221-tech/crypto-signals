@@ -63,6 +63,12 @@ const entryT = (it, p) => p.in < it.bars.length ? it.bars[p.in].t : it.bars.at(-
   const items = (await S.pool(scan, 8, s => load(s, prices, ex))).filter(Boolean);
   // 掃描到的所有幣一起驗證
   const val = { 1: S.walkForward(items.map(i => i.runs[0])), [-1]: S.walkForward(items.map(i => i.runs[1])) };
+  // 歷史持有時間（只算允許交易的年份，和網頁一致）
+  for (const d of [1, -1]) {
+    const on = new Set(val[d].rows.filter(r => r.on).map(r => r.y));
+    val[d].hold = S.holdStats(items.flatMap(i => i.runs[d > 0 ? 0 : 1].trades).filter(t => on.has(new Date(t.t).getUTCFullYear())));
+  }
+  const day = t => new Date(t).toLocaleDateString('zh-TW', { timeZone: 'Asia/Taipei', month: 'numeric', day: 'numeric' });
   // 和網頁的格子一致：規則通過、本幣歷史不虧、在掃描名單內
   const live = items.filter(it => scan.includes(it.sym)).flatMap(it => it.runs.filter(r => val[r.dir].pass && S.coinOk(r.own)).map(r => ({ it, r })));
   const weak = [1, -1].some(d => val[d].pass && val[d].recent.n >= 10 && val[d].recent.avg <= 0)
@@ -86,6 +92,7 @@ const entryT = (it, p) => p.in < it.bars.length ? it.bars[p.in].t : it.bars.at(-
         `參考進場 ${price(r.pos.px)}（即時 ${price(it.live)}）`,
         `止損 ${price(r.pos.stop)}（${pct(r.pos.stop / r.pos.px - 1)}）`,
         `止盈 ${price(r.pos.target)}（${pct(r.pos.target / r.pos.px - 1)}）`,
+        `預計持有：通常 ${val[r.dir].hold.med} 天，最晚 ${day(S.deadline(it.bars, r.pos))} 早上 8 點出場`,
         `本幣歷史 ${r.own.n} 筆，勝率 ${(r.own.win * 100).toFixed(0)}%，平均每筆 ${pct(r.own.avg)}`].join('\n')),
       ...due.map(({ it, r }) => { const t = r.trades.at(-1); return `${posLine(it.sym, r.dir, t)}\n持有滿 ${S.MAX_HOLD} 根 K 線，規則以收盤價 ${price(t.exit)} 出場（${pct(r.dir * (t.exit / t.px - 1))}）。還沒出場的請現在出場。`; }),
     ];
