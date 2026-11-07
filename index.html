@@ -44,6 +44,9 @@
   button { height: 40px; padding: 0 22px; border: 0; border-radius: 8px; background: var(--office); color: #fff; font-weight: 700; cursor: pointer; transition: background .2s var(--ease); }
   button:hover { background: var(--office-deep); }
   button:disabled { background: #8FA3B8; cursor: progress; }
+  button.ghost { background: #fff; color: var(--office); box-shadow: inset 0 0 0 1px var(--line-strong); }
+  button.ghost:hover { background: var(--office-tint); }
+  button.ghost:disabled { color: var(--ink-3); background: #fff; }
   .auto { display: flex; align-items: center; gap: 8px; font-size: 14px; color: var(--ink-2); flex-basis: 100%; }
   .auto input { width: 18px; height: 18px; accent-color: var(--office); }
 
@@ -161,6 +164,7 @@
     .swipe { display: block; }
     form label.num { width: calc(50% - 8px); }
     form button { flex: 1 1 100%; }
+    form button.ghost { order: 1; }
     .grid { grid-template-columns: repeat(2, 1fr); }
     .levels { grid-template-columns: 1fr 1fr; }
     .detail, .rule, .live { padding: 18px 16px; }
@@ -181,6 +185,7 @@
 <div class="controls">
   <form id="f" class="wrap">
     <label class="coins">幣種（Binance 代號，逗號分隔，以 USDT 計價）<input id="syms" autocomplete="off" spellcheck="false"></label>
+    <button type="button" class="ghost" id="top">換成成交量前 30 名</button>
     <label class="num">週期<select id="tf"></select></label>
     <label class="num">本金（USDT）<input id="cap" type="number" min="0" step="any" inputmode="decimal" placeholder="例如 1000"></label>
     <label class="num">每筆風險 %<input id="risk" type="number" min="0.1" max="10" step="0.1" value="1"></label>
@@ -378,6 +383,19 @@
     } catch (e) { return { sym, err: e.message }; }
   }
 
+  // 成交量前 n 名：排除穩定幣、黃金與槓桿代幣，並要求至少 18 個月歷史（新上市的股票代幣等資料不夠回測）
+  const NOT_COIN = /^(USDC|FDUSD|TUSD|USDP|DAI|BUSD|EUR|EURI|AEUR|TRY|BRL|USD1|USDE|USDS|PYUSD|RLUSD|RWUSD|BFUSD|XUSD|U|PAXG|XAUT|WBTC|WBETH|BETH)$/;
+  async function topCoins(n = 30) {
+    const res = await fetch(`${API}/ticker/24hr`).catch(() => null);
+    if (!res || !res.ok) throw new Error('取不到成交量排行');
+    const ranked = (await res.json()).filter(t => t.symbol.endsWith('USDT'))
+      .map(t => ({ b: t.symbol.slice(0, -4), v: +t.quoteVolume }))
+      .filter(t => /^[A-Z0-9]{1,15}$/.test(t.b) && !NOT_COIN.test(t.b) && !/(UP|DOWN|BULL|BEAR)$/.test(t.b))
+      .sort((a, b) => b.v - a.v).slice(0, n * 3);
+    const months = await Promise.all(ranked.map(t => fetch(`${API}/klines?symbol=${t.b}USDT&interval=1M&limit=18`).then(r => r.ok ? r.json() : []).catch(() => [])));
+    return ranked.filter((t, i) => months[i].length >= 18).slice(0, n).map(t => t.b);
+  }
+
   // 即時 K 線：已收盤的 K 線來自回測資料，正在跑的那根由 Binance 即時串流更新
   const TZ = -new Date().getTimezoneOffset() * 60; // 圖表以 UTC 顯示，平移成本地時間
   const toT = ms => Math.floor(ms / 1000) + TZ;
@@ -430,7 +448,8 @@
 
   // 畫出各幣預報與詳細，回傳目前可進場的通知
   function render() {
-    const shown = items.filter(i => i.show).map(item => ({ item, j: judge(item) }));
+    const shown = items.filter(i => i.show).map(item => ({ item, j: judge(item) }))
+      .sort((a, b) => (b.j.pri ?? -2) - (a.j.pri ?? -2)); // 有訊號的排前面，其餘照輸入順序
     if (!shown.some(s => s.item.sym === selected))
       selected = (shown.find(s => s.j.pri === 3) || shown.find(s => s.j.pri === 2) || shown[0] || {}).item?.sym ?? null;
     renderHeadline(shown); renderGrid(shown); renderDetail(shown); drawChart();
@@ -489,6 +508,12 @@
   $('tf').innerHTML = Object.entries(TF).map(([k, v]) => `<option value="${k}">${v.label}</option>`).join('');
   let p = {}; try { p = JSON.parse(localStorage.getItem('prefs')) || {}; } catch {}
   $('syms').value = p.syms || BASKET.join(',');
+  $('top').onclick = async () => {
+    $('top').disabled = true; $('top').textContent = '讀取排行中…';
+    try { $('syms').value = (await topCoins(30)).join(','); run(); }
+    catch (e) { $('status').textContent = e.message + '，先用預設的 10 個主流幣。'; run(); }
+    $('top').disabled = false; $('top').textContent = '換成成交量前 30 名';
+  };
   if (p.tf in TF) $('tf').value = p.tf;
   if (p.cap) $('cap').value = p.cap;
   if (p.risk) $('risk').value = p.risk;
@@ -509,5 +534,5 @@
     render();
     if (matchMedia('(max-width: 1020px)').matches) $('detail').scrollIntoView({ behavior: 'smooth', block: 'start' });
   };
-  run();
+  if (p.syms) run(); else $('top').click(); // 第一次開啟預設看成交量前 30 名
 </script>
