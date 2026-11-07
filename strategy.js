@@ -219,14 +219,14 @@ const deadline = (bars, pos) => (pos.in < bars.length ? bars[pos.in].t : bars.at
 // 下單規劃：先用固定風險決定倉位，槓桿只開到「夠用」，而且強平價一定要在止損之外
 // d＝1 做多、-1 放空；avgR＝歷史上每冒 1 元風險（打到止損的虧損）平均賺幾元，用來估預期盈虧
 const LIQ_BUFFER = 0.01; // 維持保證金與手續費的緩衝
-function plan(capital, riskPct, entry, stop, target, d, avgR) {
+function plan(capital, riskPct, entry, stop, target, d, avgR, opt = {}) {
   const dist = Math.abs(entry - stop) / entry;
-  const maxLev = Math.max(1, Math.floor(1 / (dist + LIQ_BUFFER)));
+  const maxLev = Math.min(opt.maxLev ?? Infinity, Math.max(1, Math.floor(1 / (dist + LIQ_BUFFER))));
   let value = capital * riskPct / dist;
   const capped = value > capital * maxLev; // 要的倉位大到會先被強平，只好縮小
   if (capped) value = capital * maxLev;
   const lev = Math.max(1, Math.ceil(value / capital - 1e-9));
-  const cost = value * COST;
+  const cost = value * (opt.cost ?? COST);
   return {
     value, lev, maxLev, capped, cost,
     qty: value / entry,
@@ -394,6 +394,8 @@ if (typeof module !== 'undefined') {
     assert.deepStrictEqual([q.capped, q.lev, q.maxLev], [true, 9, 9]); near(q.value, 9000); assert.ok(q.liq < 90);
     q = plan(1000, 0.05, 100, 102, 96, -1, 0);        // 放空：強平價在止損之上
     assert.ok(q.lev === 3 && q.liq > 102);
+    q = plan(1000, 0.05, 100, 98, 104, 1, 0, { maxLev: 1, cost: 0.01 }); // 台股：不開槓桿，倉位最多等於資金
+    assert.deepStrictEqual([q.lev, q.capped], [1, true]); near(q.value, 1000); near(q.cost, 10);
     const h = holdStats([{ in: 1, out: 3, why: 'target' }, { in: 1, out: 1, why: 'stop' }, { in: 1, out: 20, why: 'time' }]);
     assert.deepStrictEqual([h.med, h.target, h.stop], [3, 3, 1]); near(h.timeShare, 1 / 3);
     const bb = Array.from({ length: 5 }, (_, i) => ({ t: i * 864e5 }));

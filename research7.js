@@ -3,40 +3,14 @@
 // 資料：證交所開放資料（股數、收盤價）、Yahoo Finance 還原權息日線（約 10 年）。只做多。
 // 成本：手續費 0.1425%×2＋證交稅 0.3%＋滑價單邊 0.1%＝一來一回約 0.785%
 const S = require('./strategy.js');
-const TW_COST = 0.001425 * 2 + 0.003 + 0.002;
-const ADJ = 0.003 - TW_COST; // strategy.js 的回測已扣加密貨幣成本 0.3%，換成台股成本
-const N = 150;
+const { ADJ, universe, bars } = require('./tw-data.js');
 const pct = v => (v >= 0 ? '+' : '') + (v * 100).toFixed(2) + '%';
-
-async function universe() {
-  const [co, day] = await Promise.all([
-    fetch('https://openapi.twse.com.tw/v1/opendata/t187ap03_L').then(r => r.json()),
-    fetch('https://openapi.twse.com.tw/v1/exchangeReport/STOCK_DAY_ALL').then(r => r.json()),
-  ]);
-  const close = Object.fromEntries(day.map(d => [d.Code, +d.ClosingPrice]));
-  return co.filter(c => /^\d{4}$/.test(c['公司代號']) && close[c['公司代號']] > 0)
-    .map(c => ({ code: c['公司代號'], name: c['公司簡稱'], cap: +c['已發行普通股數或TDR原股發行股數'] * close[c['公司代號']] }))
-    .sort((a, b) => b.cap - a.cap).slice(0, N);
-}
-
-// Yahoo 日線，依還原收盤價把開高低收一起還原（除權息當天才不會被誤判成暴跌）
-async function bars(code) {
-  const res = await fetch(`https://query1.finance.yahoo.com/v8/finance/chart/${code}.TW?range=10y&interval=1d`, { headers: { 'User-Agent': 'Mozilla/5.0' } });
-  const r = (await res.json()).chart.result[0], q = r.indicators.quote[0], adj = r.indicators.adjclose[0].adjclose;
-  const out = [];
-  r.timestamp.forEach((ts, i) => {
-    if ([q.open[i], q.high[i], q.low[i], q.close[i], adj[i]].some(v => v == null || !(v > 0))) return;
-    const k = adj[i] / q.close[i], t = ts * 1000;
-    out.push({ t, o: q.open[i] * k, h: q.high[i] * k, l: q.low[i] * k, c: adj[i], T: t + 864e5 - 1 });
-  });
-  return out;
-}
 
 const line = (label, w) => `${label}：全部 ${w.total.n} 筆 勝率 ${(w.total.win * 100).toFixed(0)}% 平均 ${pct(w.total.avg)} t ${w.total.t.toFixed(1)}｜`
   + `滾動 ${w.wf.n} 筆 平均 ${w.wf.n ? pct(w.wf.avg) : '—'} t ${w.wf.t.toFixed(1)}｜近 12 月 ${w.recent.n} 筆 ${pct(w.recent.avg)}｜${w.pass ? '通過' : '未通過'}`;
 
 (async () => {
-  const uni = await universe();
+  const uni = await universe(150);
   console.log(`上市市值前 ${uni.length} 大：${uni.slice(0, 12).map(u => u.name).join('、')}…`);
   const data = (await S.pool(uni, 4, async u => { try { const b = await bars(u.code); return b.length >= 500 ? { ...u, b } : null; } catch { return null; } })).filter(Boolean);
   console.log(`取得 ${data.length} 檔，平均 ${Math.round(data.reduce((s, d) => s + d.b.length, 0) / data.length)} 根日線`);

@@ -5,6 +5,7 @@
 // 其他環境變數：EXCHANGE（預設只看 Ourbit 有的幣；all＝不限）、SCAN（成交量前幾名，預設 100）、RR（盈虧比，預設 2）、TEST=true（沒有事件也傳一則摘要）
 const fs = require('fs');
 const S = require('./strategy.js');
+const { send } = require('./telegram.js');
 
 const TF = '1d'; // 只有日線規則通過驗證
 const MODE = process.env.MODE || 'signals';
@@ -18,23 +19,6 @@ const price = v => v.toLocaleString('en-US', { maximumSignificantDigits: 6 });
 const SIDE = d => d > 0 ? '做多' : '放空';
 const FOOT = `\n\n頁面：${PAGE}\n歷史回測不保證未來獲利，這不是投資建議。`;
 
-async function send(text) {
-  const token = (process.env.TELEGRAM_BOT_TOKEN || '').trim(), chat = (process.env.TELEGRAM_CHAT_ID || '').trim(); // 複製時常多帶空白或換行
-  if (!token || !chat) { console.log('（沒有設定 Telegram，只印出訊息）\n\n' + text); return; }
-  const api = (m, body) => fetch(`https://api.telegram.org/bot${token}/${m}`, {
-    method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body || {}),
-  });
-  const res = await api('sendMessage', { chat_id: chat, text, disable_web_page_preview: true });
-  if (res.ok) { console.log('已傳送 Telegram 通知'); return; }
-  const why = await res.text();
-  // 診斷：記錄是公開的，所以只印機器人帳號與「對不對得上」，不印聊天 ID
-  const me = await api('getMe').then(r => r.json()).catch(() => ({}));
-  const up = await api('getUpdates').then(r => r.json()).catch(() => ({}));
-  const chats = [...new Set((up.result || []).map(u => String((u.message || u.my_chat_member || {}).chat?.id)).filter(x => x !== 'undefined'))];
-  console.log(`診斷：金鑰對應的機器人是 @${me.result?.username ?? '（金鑰無效）'}；它最近收到 ${chats.length} 個聊天的訊息；`
-    + `填的聊天 ID 是 ${/^-?\d+$/.test(chat) ? `${chat.length} 位數字` : '不是純數字'}，${chats.includes(chat) ? '和收到的訊息對得上' : '和收到的訊息對不上'}。`);
-  throw new Error(`Telegram 傳送失敗：HTTP ${res.status} ${why}`);
-}
 
 // 和網頁一樣：每個掃描的幣都抓完整歷史；資金費率只在出現放空訊號時才抓
 async function load(sym, prices, ex) {

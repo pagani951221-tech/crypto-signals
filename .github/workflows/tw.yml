@@ -1,0 +1,41 @@
+name: 台股（實驗性）
+
+on:
+  schedule:
+    - cron: '40 6 * * 1-5' # 週一到週五 UTC 06:40＝台灣 14:40，收盤後（GitHub 排程可能延遲）
+  workflow_dispatch:
+    inputs:
+      test:
+        description: '沒有事件也傳一則摘要'
+        type: boolean
+        default: false
+
+permissions:
+  contents: write # 要把算好的 tw.json 提交回倉庫給網頁讀
+
+concurrency:
+  group: tw
+
+jobs:
+  scan:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: 計算台股訊號並通知
+        run: node tw-scan.js
+        env:
+          TEST: ${{ inputs.test }}
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+      - name: 提交 tw.json
+        run: |
+          git diff --quiet tw.json && exit 0
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git commit -am "Update Taiwan stock data"
+          git pull --rebase
+          git push

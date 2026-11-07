@@ -17,6 +17,7 @@
     --radius: 10px; --ease: cubic-bezier(.16, 1, .3, 1);
   }
   * { box-sizing: border-box; }
+  [hidden] { display: none !important; } /* 表單的 display:grid 會蓋過瀏覽器預設的隱藏 */
   html { background: var(--ground); scrollbar-color: var(--line-strong) var(--ground); }
   body { margin: 0; color: var(--ink); background: var(--ground); font: 16px/1.6 "Noto Sans TC", "Microsoft JhengHei", system-ui, sans-serif; font-variant-numeric: tabular-nums; -webkit-font-smoothing: antialiased; }
   ::selection { background: #C9DDF1; color: var(--ink); }
@@ -205,12 +206,13 @@
 
 <div class="controls">
   <form id="f" class="wrap">
-    <label class="scanl">交易所<select id="ex"><option value="ourbit" selected>只看 Ourbit 有的幣</option><option value="all">不限交易所</option></select></label>
-    <label class="scanl">掃描範圍<select id="scan"><option value="50">成交量前 50 名</option><option value="100" selected>成交量前 100 名</option><option value="150">成交量前 150 名</option></select></label>
-    <label class="num">週期<select id="tf"></select></label>
-    <label class="num">目前資金（USDT）<input id="cap" type="number" min="0" step="any" inputmode="decimal" placeholder="例如 1000"></label>
+    <label class="scanl">市場<select id="mkt"><option value="crypto" selected>加密貨幣</option><option value="tw">台股（實驗性）</option></select></label>
+    <label class="scanl cr">交易所<select id="ex"><option value="ourbit" selected>只看 Ourbit 有的幣</option><option value="all">不限交易所</option></select></label>
+    <label class="scanl cr">掃描範圍<select id="scan"><option value="50">成交量前 50 名</option><option value="100" selected>成交量前 100 名</option><option value="150">成交量前 150 名</option></select></label>
+    <label class="num cr">週期<select id="tf"></select></label>
+    <label class="num"><span id="capl">目前資金（USDT）</span><input id="cap" type="number" min="0" step="any" inputmode="decimal" placeholder="例如 1000"></label>
     <label class="num">每筆風險 %<input id="risk" type="number" min="0.1" max="10" step="0.1" value="1"></label>
-    <label class="num">盈虧比（倍）<input id="rr" type="number" min="1.5" max="5" step="0.1" value="2"></label>
+    <label class="num cr">盈虧比（倍）<input id="rr" type="number" min="1.5" max="5" step="0.1" value="2"></label>
     <button id="go">更新</button>
     <label class="auto"><input id="auto" type="checkbox">每根 K 線收盤後自動更新，有新的進場訊號時跳出通知（頁面需保持開啟）</label>
   </form>
@@ -221,8 +223,9 @@
     <h2 id="headline">讀取行情中…</h2>
     <p id="reason"></p>
     <p id="status"></p>
+    <p class="alert" id="twnote" hidden><b>台股是實驗性質：</b>同一條規則在上市市值前 150 大，只有 2024 年起通過驗證，賺錢集中在近幾年的多頭，更早的年份大多打平；扣掉手續費與證交稅（一來一回約 0.785%）後，每筆平均只多賺一點。資料每個交易日 14:40 後由雲端更新（來源：證交所、Yahoo Finance，價格為還原權息價）。只做多、不開槓桿，盈虧比固定 2 倍。</p>
     <div class="pick">
-      <label for="pick">查看其他幣</label>
+      <label for="pick" id="pickl">查看其他幣</label>
       <input id="pick" list="coinlist" autocomplete="off" spellcheck="false" placeholder="選擇或輸入代號，例如 PEPE">
       <datalist id="coinlist"></datalist>
       <button type="button" class="ghost" id="pickgo">查看</button>
@@ -268,7 +271,7 @@
 
 <script src="https://unpkg.com/lightweight-charts@4.2.0/dist/lightweight-charts.standalone.production.js"></script>
 <!-- 改 strategy.js 時把 v 加 1，瀏覽器才會抓新版而不是用快取 -->
-<script src="strategy.js?v=15"></script>
+<script src="strategy.js?v=16"></script>
 <script>
   const $ = id => document.getElementById(id);
   const pct = v => (v >= 0 ? '+' : '−') + Math.abs(v * 100).toFixed(1) + '%';
@@ -279,41 +282,47 @@
   const SIDE = d => d > 0 ? '做多' : '放空';
   const FRESH = { stop: '已碰到止損位，訊號作廢', target: '已到止盈位，這段行情已走完', late: '已走完一半以上的止盈距離，追進去盈虧比太差' };
   const statCells = st => st.n
-    ? `<td>${pct(st.avg)}</td><td>${pct0(st.win)}</td><td>${isFinite(st.payoff) ? st.payoff.toFixed(2) : '—'}</td><td>${pct0(st.be)}</td><td>${st.t.toFixed(1)}</td><td>${st.n}</td>`
+    ? `<td>${pct(st.avg)}</td><td>${pct0(st.win)}</td><td>${Number.isFinite(st.payoff) ? st.payoff.toFixed(2) : '—'}</td><td>${pct0(st.be)}</td><td>${st.t.toFixed(1)}</td><td>${st.n}</td>`
     : '<td>—</td><td>—</td><td>—</td><td>—</td><td>—</td><td>0</td>';
   const STAT_HEAD = '<th>平均每筆</th><th>勝率</th><th>實際盈虧比</th><th>兩平勝率</th><th>t 值</th><th>筆數</th>';
   let items = [], val = {}, seen = null, timer, selected = null;
+  const isTW = () => $('mkt').value === 'tw';
+  const UNIT = () => isTW() ? '檔' : '個幣'; // 格子與標題用的量詞
 
   // 下單規劃：投入多少、槓桿幾倍、打到止損／止盈各賺賠多少、依歷史平均的預期盈虧
   function sizeText(live, p, d, r) {
     const cap = +$('cap').value, risk = +$('risk').value / 100;
     if (!(cap > 0 && risk > 0)) return '<p class="size">在上方填入目前資金，就會算出投入金額、槓桿與預期盈虧。</p>';
-    const z = plan(cap, risk, live, p.stop, p.target, d, val[d].avgR);
-    const usdt = v => v.toLocaleString('en-US', { maximumFractionDigits: 2 });
+    const tw = isTW(), cur = tw ? '元' : 'USDT';
+    const z = plan(cap, risk, live, p.stop, p.target, d, val[d].avgR, tw ? { maxLev: 1, cost: twCost } : {});
+    const usdt = v => v.toLocaleString('en-US', { maximumFractionDigits: tw ? 0 : 2 }) + (tw ? '' : '');
+    const qtyText = tw ? (q => { const sh = Math.floor(q); return `${sh.toLocaleString('en-US')} 股（${Math.floor(sh / 1000)} 張又 ${sh % 1000} 股）`; })(z.qty)
+      : `${z.qty.toLocaleString('en-US', { maximumSignificantDigits: 4 })} 枚`;
     const ofCap = v => (v / cap * 100).toFixed(1) + '%';
     const levText = z.lev === 1 ? (d > 0 ? '不用槓桿' : '1 倍') : `${z.lev} 倍（逐倉）`;
     return `<div class="plan">
-      <h4>下單規劃（目前資金 ${usdt(cap)} USDT）</h4>
+      <h4>下單規劃（目前資金 ${usdt(cap)} ${cur}）</h4>
       <dl>
-        <div><dt>投入（倉位價值）</dt><dd>${usdt(z.value)} USDT<small>${z.qty.toLocaleString('en-US', { maximumSignificantDigits: 4 })} 枚，資金的 ${ofCap(z.value)}</small></dd></div>
-        <div><dt>建議槓桿</dt><dd>${levText}<small>${z.lev > 1 ? `保證金 ${usdt(z.margin)} USDT，強平價約 ${price(z.liq)}` : `${d > 0 ? '現貨直接買' : '放空要用合約'}，占用資金 ${usdt(z.margin)} USDT`}</small></dd></div>
-        <div><dt>打到止損</dt><dd class="neg">−${usdt(z.loss)} USDT<small>資金的 −${ofCap(z.loss)}</small></dd></div>
-        <div><dt>打到止盈</dt><dd class="pos">+${usdt(z.gain)} USDT<small>資金的 +${ofCap(z.gain)}</small></dd></div>
-        <div class="wide"><dt>預期盈虧（歷史上每冒 1 元風險，平均${val[d].avgR >= 0 ? '賺' : '賠'} ${Math.abs(val[d].avgR).toFixed(2)} 元）</dt><dd>${z.expect >= 0 ? '+' : '−'}${usdt(Math.abs(z.expect))} USDT<small>資金的 ${pct(z.expect / cap)}；這是長期平均，單筆不是賺到止盈就是賠到止損</small></dd></div>
+        <div><dt>投入（倉位價值）</dt><dd>${usdt(z.value)} ${cur}<small>${qtyText}，資金的 ${ofCap(z.value)}</small></dd></div>
+        <div><dt>建議槓桿</dt><dd>${levText}<small>${z.lev > 1 ? `保證金 ${usdt(z.margin)} ${cur}，強平價約 ${price(z.liq)}` : `${tw ? '現股買進' : d > 0 ? '現貨直接買' : '放空要用合約'}，占用資金 ${usdt(z.margin)} ${cur}`}</small></dd></div>
+        <div><dt>打到止損</dt><dd class="neg">−${usdt(z.loss)} ${cur}<small>資金的 −${ofCap(z.loss)}</small></dd></div>
+        <div><dt>打到止盈</dt><dd class="pos">+${usdt(z.gain)} ${cur}<small>資金的 +${ofCap(z.gain)}</small></dd></div>
+        <div class="wide"><dt>預期盈虧（歷史上每冒 1 元風險，平均${val[d].avgR >= 0 ? '賺' : '賠'} ${Math.abs(val[d].avgR).toFixed(2)} 元）</dt><dd>${z.expect >= 0 ? '+' : '−'}${usdt(Math.abs(z.expect))} ${cur}<small>資金的 ${pct(z.expect / cap)}；這是長期平均，單筆不是賺到止盈就是賠到止損</small></dd></div>
       </dl>
-      ${z.capped ? `<p class="alert">照每筆風險 ${risk * 100}% 需要的槓桿太高，強平價會落在止損之前，所以倉位已縮小到 ${z.maxLev} 倍上限。</p>` : ''}
-      <p class="meta">已含手續費與滑價約 ${usdt(z.cost)} USDT。槓桿只是少放一點保證金，不會改變風險：風險由倉位大小和止損決定。${z.lev > 1 ? '強平價是逐倉的約略值，下單前請以交易所顯示為準。' : ''}</p>
+      ${z.capped ? (tw ? `<p class="alert">照每筆風險 ${risk * 100}% 需要的倉位超過你的資金，台股不開槓桿，所以倉位已縮小到全部資金。</p>`
+        : `<p class="alert">照每筆風險 ${risk * 100}% 需要的槓桿太高，強平價會落在止損之前，所以倉位已縮小到 ${z.maxLev} 倍上限。</p>`) : ''}
+      <p class="meta">已含${tw ? '手續費、證交稅' : '手續費'}與滑價約 ${usdt(z.cost)} ${cur}。${tw ? '漲跌停或跳空時，止損可能成交在更差的價格。' : `槓桿只是少放一點保證金，不會改變風險：風險由倉位大小和止損決定。${z.lev > 1 ? '強平價是逐倉的約略值，下單前請以交易所顯示為準。' : ''}`}</p>
     </div>`;
   }
 
   // K 線根數換成天或小時
-  const dur = n => { if (n == null) return '—'; const ms = n * TF[$('tf').value].ms; return ms >= 864e5 ? `${+(ms / 864e5).toFixed(1)} 天` : `${+(ms / 36e5).toFixed(1)} 小時`; };
+  const dur = n => { if (n == null) return '—'; if (isTW()) return `${Math.round(n)} 個交易日`; const ms = n * TF[$('tf').value].ms; return ms >= 864e5 ? `${+(ms / 864e5).toFixed(1)} 天` : `${+(ms / 36e5).toFixed(1)} 小時`; };
   const holdText = (d, bars, p, held) => {
     const h = val[d].hold;
     if (!h || !h.n) return '';
     return `<p class="holdline"><b>預計持有：</b>${held != null ? `已持有 ${dur(held)}；` : ''}歷史上通常 <b>${dur(h.med)}</b> 結束`
       + `（碰到止盈的一般 ${dur(h.target)}、碰到止損的一般 ${dur(h.stop)}，${(h.timeShare * 100).toFixed(0)}% 持有到期才出場）。`
-      + `最長 ${MAX_HOLD} 根 K 線，最晚 <b>${when(deadline(bars, p))}</b> 收盤出場。</p>`;
+      + `最長 ${MAX_HOLD} 根 K 線，最晚${isTW() ? '約' : ''} <b>${when(p.deadline ?? deadline(bars, p))}</b> 收盤出場。</p>`;
   };
 
   const levels = p => `<dl class="levels">
@@ -330,13 +339,13 @@
     if (r.state === 'wait') return wait('尚無訊號', `<p>尚未出現${s}訊號。訊號只在 K 線收盤後變動。</p>`);
     const f = freshness(p, d, live);
     if (r.state === 'enter') {
-      const head = `<p>最新 K 線收盤出現${s}訊號，${MAX_HOLD} 根 K 線內兩邊都沒碰到就市價出場。</p>${levels(p)}${holdText(d, bars, p)}`;
+      const head = `<p>最新 K 線收盤出現${s}訊號${isTW() ? '，下一個交易日開盤附近買進' : ''}，${MAX_HOLD} 根 K 線內兩邊都沒碰到就市價出場。</p>${levels(p)}${holdText(d, bars, p)}`;
       if (f !== 'ok') return { pri: 1, k: 'wait', label: '觀望', one: '訊號已過時，不追', text: `${head}<p class="alert">即時價 ${price(live)} ${FRESH[f]}，不建議進場。</p>` };
       return { pri: 3, k: d > 0 ? 'long' : 'short', label: s, one: `止損 ${price(p.stop)}
 止盈 ${price(p.target)}`, text: head + sizeText(live, p, d, r),
-        alert: { key: `${d}|${bars.at(-1).t}`, body: `${s}　進場約 ${price(live)}　止損 ${price(p.stop)}　止盈 ${price(p.target)}` } };
+        alert: { key: `${d}|${item.lastT ?? bars.at(-1).t}`, body: `${s}　進場約 ${price(live)}　止損 ${price(p.stop)}　止盈 ${price(p.target)}` } };
     }
-    const now = `<p>規則已在 ${when(bars[p.in].t)} ${s}，即時價 ${price(live)}（${pct(d * (live / p.px - 1))}）。</p>${levels(p)}${holdText(d, bars, p, bars.length - p.in)}`;
+    const now = `<p>規則已在 ${when(p.t ?? bars[p.in].t)} ${s}，${isTW() ? '收盤價' : '即時價'} ${price(live)}（${pct(d * (live / p.px - 1))}）。</p>${levels(p)}${holdText(d, bars, p, p.held ?? bars.length - p.in)}`;
     if (f === 'stop' || f === 'target') return { pri: 1, k: 'wait', label: '觀望', one: `已到${f === 'stop' ? '止損' : '止盈'}位`, text: `${now}<p class="alert">即時價已到${f === 'stop' ? '止損' : '止盈'}位，這筆應已出場，等下一次訊號。</p>` };
     return { pri: 2, k: 'hold', label: d > 0 ? '持有多單' : '持有空單', one: `${pct(d * (live / p.px - 1))} 持有中`, text: `${now}<p>已進場者照這組止損止盈續抱；未進場者不追價，等下一次訊號。</p>` };
   }
@@ -353,12 +362,12 @@
   function renderGrid(shown, total) {
     if (!shown.length) {
       $('grid').innerHTML = [1, -1].some(d => val[d].pass)
-        ? `<p class="empty"><b>目前沒有可以操作的幣</b>掃描的 ${total} 個幣都還沒出現進場訊號，也沒有持有中的部位。想看某個幣的狀態，用上方「查看其他幣」。</p>`
-        : `<p class="empty"><b>這個週期不建議操作</b>規則沒有通過逐年滾動驗證，所以 ${total} 個幣都不會給訊號。</p>`;
+        ? `<p class="empty"><b>目前沒有可以操作的${isTW() ? '股票' : '幣'}</b>掃描的 ${total} ${UNIT()}都還沒出現進場訊號，也沒有持有中的部位。想看某${isTW() ? '檔' : '個幣'}的狀態，用上方「查看其他${isTW() ? '股票' : '幣'}」。</p>`
+        : `<p class="empty"><b>這個週期不建議操作</b>規則沒有通過逐年滾動驗證，所以 ${total} ${UNIT()}都不會給訊號。</p>`;
       return;
     }
     $('grid').innerHTML = shown.map(({ item, j }) => `<button type="button" class="cell ${j.k}" data-sym="${item.sym}" aria-pressed="${item.sym === selected}">
-      <span class="sym">${item.sym}<span class="px">${item.live ? price(item.live) : ''}</span></span>
+      <span class="sym">${item.label ?? item.sym}<span class="px">${item.live ? price(item.live) : ''}</span></span>
       <span class="word">${j.label}</span><span class="one">${esc(j.one)}</span></button>`).join('');
   }
 
@@ -368,12 +377,12 @@
     const { item, j } = hit;
     if (item.err) { $('detail').innerHTML = `<div class="head"><h3>${item.sym}</h3></div><span class="badge">無資料</span><div class="say"><p>${esc(item.err)}</p></div>`; return; }
     const body = j.lines.length ? j.lines.map(l => l.text).join('') : '<p>這個週期的規則沒有通過滾動驗證，不建議依技術訊號操作。</p>';
-    const o = st => st.n ? `<td>${pct(st.avg)}</td><td>${pct0(st.win)}</td><td>${isFinite(st.payoff) ? st.payoff.toFixed(2) : '—'}</td><td>${pct(st.worst)}</td><td>${st.n}</td>` : '<td>—</td><td>—</td><td>—</td><td>—</td><td>0</td>';
+    const o = st => st.n ? `<td>${pct(st.avg)}</td><td>${pct0(st.win)}</td><td>${Number.isFinite(st.payoff) ? st.payoff.toFixed(2) : '—'}</td><td>${pct(st.worst)}</td><td>${st.n}</td>` : '<td>—</td><td>—</td><td>—</td><td>—</td><td>0</td>';
     const rows = item.runs.map(r => `<tr><td>${SIDE(r.dir)}</td>${o(r.own)}</tr>`).join('');
-    $('detail').innerHTML = `<div class="head"><h3>${item.sym}</h3><span class="px">即時價 ${price(item.live)}</span></div>
+    $('detail').innerHTML = `<div class="head"><h3>${item.full ?? item.sym}</h3><span class="px">${isTW() ? '收盤價' : '即時價'} ${price(item.live)}</span></div>
       <span class="badge ${j.k}">${j.label}</span>
       <div class="say">${body}</div>
-      <h4>這個幣全部歷史的回測</h4>
+      <h4>這${isTW() ? '檔股票' : '個幣'}全部歷史的回測</h4>
       <div class="scroll"><table><tr><th>方向</th><th>平均每筆</th><th>勝率</th><th>盈虧比</th><th>最差一筆</th><th>筆數</th></tr>${rows}</table></div>
       ${item.perp === false ? '<p class="meta" style="margin-top:8px">此幣沒有永續合約，放空回測用固定資金費率估計。</p>' : ''}`;
   }
@@ -395,11 +404,11 @@
     }
     const act = shown.filter(s => s.j.pri === 3), hold = shown.filter(s => s.j.pri === 2);
     const parts = act.length + hold.length > 5
-      ? [act.length && `${act.length} 個幣可進場`, hold.length && `${hold.length} 個持有中`].filter(Boolean)
-      : [...act.map(s => `${s.item.sym} 可${s.j.label}`), ...hold.map(s => `${s.item.sym} ${s.j.label}`)];
+      ? [act.length && `${act.length} ${UNIT()}可進場`, hold.length && `${hold.length} ${UNIT()}持有中`].filter(Boolean)
+      : [...act.map(s => `${s.item.label ?? s.item.sym} 可${s.j.label}`), ...hold.map(s => `${s.item.label ?? s.item.sym} ${s.j.label}`)];
     const rest = shown.length - act.length - hold.length;
     $('headline').textContent = '今日行動預報：' + (parts.length ? parts.join('、') + (rest ? '，其餘觀望' : '') : '全部觀望');
-    $('reason').textContent = act.length ? '點有訊號的幣看進場、止損、止盈與建議倉位。' : hold.length ? '持有中的部位照原本的止損止盈處理；沒有新的進場訊號。' : `規則仍然有效，只是還沒有任何幣出現進場訊號。訊號只在每根 K 線收盤後變動。`;
+    $('reason').textContent = act.length ? `點有訊號的${isTW() ? '股票' : '幣'}看進場、止損、止盈與建議倉位。` : hold.length ? '持有中的部位照原本的止損止盈處理；沒有新的進場訊號。' : `規則仍然有效，只是還沒有任何${isTW() ? '股票' : '幣'}出現進場訊號。訊號只在每根 K 線收盤後變動。`;
   }
 
   // 像雨量圖的分級色帶：每級的字色都選過對比
@@ -412,8 +421,10 @@
   const yearColor = st => BANDS.find(b => st.avg >= b.min);
 
   function renderVal(ex) {
-    $('exit').textContent = `目前出場設定：止損 ${ex.sl} ATR、止盈 ${+ex.tp.toFixed(2)} ATR（設定盈虧比 ${+(ex.tp / ex.sl).toFixed(2)} 倍）。${TF[$('tf').value].label}，用掃描到的 ${items.filter(i => i.show && i.runs).length} 個幣合併計算。`;
-    $('val').innerHTML = [1, -1].map(d => {
+    $('exit').textContent = isTW()
+      ? `台股（實驗性）：止損 3 ATR、止盈 6 ATR（盈虧比固定 2 倍），只做多。日線，用上市市值前 ${items.length} 大合併計算，成本一來一回約 ${(twCost * 100).toFixed(3)}%。`
+      : `目前出場設定：止損 ${ex.sl} ATR、止盈 ${+ex.tp.toFixed(2)} ATR（設定盈虧比 ${+(ex.tp / ex.sl).toFixed(2)} 倍）。${TF[$('tf').value].label}，用掃描到的 ${items.filter(i => i.show && i.runs).length} 個幣合併計算。`;
+    $('val').innerHTML = (isTW() ? [1] : [1, -1]).map(d => {
       const v = val[d];
       const warn = v.pass && v.recent.n >= 10 && v.recent.avg <= 0
         ? `<p class="alert"><b>近期轉弱：</b>最近 12 個月這條規則是虧的（${v.recent.n} 筆，平均每筆 ${pct(v.recent.avg)}）。長期統計仍通過，所以仍會給訊號。</p>` : '';
@@ -466,8 +477,8 @@
     const hit = items.find(i => i.sym === selected && i.bars);
     $('live').hidden = !hit || !window.LightweightCharts;
     if ($('live').hidden) return;
-    const tf = $('tf').value, key = hit.sym + '|' + tf;
-    $('chart-h').textContent = `${hit.sym} 即時 K 線（${TF[tf].label}）`;
+    const tf = isTW() ? '1d' : $('tf').value, key = hit.sym + '|' + tf;
+    $('chart-h').textContent = isTW() ? `${hit.full} 日 K 線` : `${hit.sym} 即時 K 線（${TF[tf].label}）`;
     if (!chart) {
       chart = LightweightCharts.createChart($('chart'), {
         autoSize: true,
@@ -480,7 +491,7 @@
       maLine = chart.addLineSeries({ color: '#8C9BAB', lineWidth: 3, priceLineVisible: false, lastValueVisible: false, crosshairMarkerVisible: false });
     }
     if (key !== chartKey || hit.bars !== chartBars) {
-      const bars = hit.bars.slice(-800), ma = sma(hit.bars.map(b => b.c), 200).slice(-800);
+      const bars = hit.bars.slice(-800), ma = hit.ma ?? sma(hit.bars.map(b => b.c), 200).slice(-800);
       // 小數位數跟著價格走：BTC 兩位，0.0018 的幣六位（預設只有兩位，低價幣會全顯示成 0.00）
       const dec = Math.min(10, Math.max(2, Math.ceil(-Math.log10(bars.at(-1).c)) + 3));
       const priceFormat = { type: 'price', precision: dec, minMove: +(10 ** -dec).toFixed(dec) };
@@ -488,7 +499,11 @@
       candles.setData(bars.map(b => ({ time: toT(b.t), open: b.o, high: b.h, low: b.l, close: b.c })));
       maLine.setData(bars.flatMap((b, i) => ma[i] == null ? [] : [{ time: toT(b.t), value: ma[i] }]));
       chart.applyOptions({ timeScale: { timeVisible: tf !== '1d' } });
-      if (key !== chartKey) { chart.timeScale().setVisibleLogicalRange({ from: bars.length - 160, to: bars.length + 6 }); live(hit.sym, tf); }
+      if (key !== chartKey) {
+        chart.timeScale().setVisibleLogicalRange({ from: bars.length - 160, to: bars.length + 6 });
+        if (hit.tw) { if (ws) { const w = ws; ws = null; w.close(); } $('chart-meta').className = ''; $('chart-meta').textContent = '收盤資料，每個交易日 14:40 後更新'; }
+        else live(hit.sym, tf);
+      }
       chartKey = key; chartBars = hit.bars;
     }
     priceLines.forEach(l => candles.removePriceLine(l));
@@ -520,9 +535,9 @@
     if (!items.some(i => i.sym === selected)) selected = shown[0]?.item.sym ?? null;
     const sel = items.find(i => i.sym === selected);
     renderHeadline(all); renderGrid(shown, all.filter(s => !s.item.err).length); renderDetail(sel && { item: sel, j: judge(sel) }); drawChart();
-    $('coinlist').innerHTML = all.filter(s => !s.item.err).map(s => `<option value="${s.item.sym}">`).join('');
-    const tf = $('tf').value;
-    return all.flatMap(({ item, j }) => j.lines.filter(l => l.alert).map(l => ({ key: `${item.sym}|${tf}|${l.alert.key}`, title: `${item.sym} ${TF[tf].label}`, body: l.alert.body })));
+    $('coinlist').innerHTML = all.filter(s => !s.item.err).map(s => `<option value="${s.item.sym}">${s.item.full ?? ''}</option>`).join('');
+    const tf = isTW() ? '1d' : $('tf').value;
+    return all.flatMap(({ item, j }) => j.lines.filter(l => l.alert).map(l => ({ key: `${item.sym}|${tf}|${l.alert.key}`, title: `${item.full ?? item.sym} ${isTW() ? '台股' : TF[tf].label}`, body: l.alert.body })));
   }
 
   // 用已下載的資料、目前的盈虧比設定重算回測與驗證
@@ -545,14 +560,72 @@
   }
 
   function savePrefs() {
-    try { localStorage.setItem('prefs', JSON.stringify({ ex: $('ex').value, scan: $('scan').value, tf: $('tf').value, cap: $('cap').value, risk: $('risk').value, rr: $('rr').value, auto: $('auto').checked })); } catch {}
+    try { localStorage.setItem('prefs', JSON.stringify({ mkt: $('mkt').value, ex: $('ex').value, scan: $('scan').value, tf: $('tf').value, cap: $('cap').value, risk: $('risk').value, rr: $('rr').value, auto: $('auto').checked })); } catch {}
+  }
+
+  // 台股：讀雲端每天算好的 tw.json，轉成和加密貨幣相同的格式
+  let twCost = 0.00785;
+  async function runTW(fromTimer = false) {
+    $('go').disabled = true;
+    $('status').textContent = '讀取台股資料…';
+    let j;
+    try { const res = await fetch('tw.json', { cache: 'no-cache' }); if (!res.ok) throw 0; j = await res.json(); }
+    catch { $('go').disabled = false; $('headline').textContent = '暫時讀不到台股資料'; $('reason').textContent = '台股資料由雲端每個交易日 14:40 後更新，請稍後再試。'; $('status').textContent = ''; return; }
+    twCost = j.cost;
+    items = j.stocks.map(s => ({
+      sym: s.code, label: s.name, full: `${s.name}（${s.code}）`, tw: true, show: true, live: s.close, lastT: s.lastT,
+      bars: s.chart ? s.chart.map(c => ({ t: c[0], o: c[1], h: c[2], l: c[3], c: c[4] })) : null,
+      ma: s.chart ? s.chart.map(c => c[5]) : null,
+      runs: [{ dir: 1, state: s.state, pos: s.pos, own: s.own, trades: [] }],
+    }));
+    val = { 1: j.val, [-1]: { pass: false, rows: [], wf: { n: 0 }, recent: { n: 0 }, total: { n: 0 }, avgR: 0 } };
+    chartKey = null;
+    renderVal();
+    const alerts = render();
+    $('go').disabled = false;
+    if (fromTimer && seen && 'Notification' in window && Notification.permission === 'granted')
+      for (const n of alerts.filter(n => !seen.has(n.key))) new Notification(n.title, { body: n.body, tag: n.key });
+    seen = new Set(alerts.map(n => n.key));
+    document.title = (alerts.length ? `(${alerts.length}) ` : '') + '台股操作建議（實驗性）';
+    $('issue').textContent = `台股日線 · 依 ${new Date(j.lastT).toLocaleDateString('zh-TW', { month: 'numeric', day: 'numeric' })} 收盤 · 雲端更新於 ${new Date(j.updated).toLocaleString('zh-TW', { month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit' })}`;
+    const act = items.filter(i => judge(i).pri >= 2).length;
+    $('status').textContent = `上市市值前 ${items.length} 大，${act} 檔有機會操作。價格為最近一個交易日的收盤價。`;
+    scheduleTW();
+  }
+  // 下一個交易日 14:45（台灣時間；只跳過週末）
+  function scheduleTW() {
+    clearTimeout(timer);
+    let t = new Date(), next;
+    for (let k = 0; k < 8 && !next; k++) {
+      const d = new Date(Date.UTC(t.getUTCFullYear(), t.getUTCMonth(), t.getUTCDate() + k, 6, 45)); // UTC 06:45＝台灣 14:45
+      const w = new Date(d.getTime() + 8 * 36e5).getUTCDay();
+      if (w !== 0 && w !== 6 && d > t) next = d;
+    }
+    const at = next.toLocaleString('zh-TW', { month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit' });
+    if (!$('auto').checked) { $('next').textContent = `下次更新 ${at}（交易日收盤後）`; return; }
+    timer = setTimeout(() => runTW(true), next - t);
+    $('next').textContent = `下次更新 ${at} · 會自動更新`;
+  }
+
+  // 依市場切換畫面：台股隱藏加密貨幣專用的設定
+  function applyMarket() {
+    const tw = isTW();
+    document.querySelectorAll('.cr').forEach(e => e.hidden = tw);
+    $('twnote').hidden = !tw;
+    $('capl').textContent = tw ? '目前資金（台幣）' : '目前資金（USDT）';
+    $('pickl').textContent = tw ? '查看其他股票' : '查看其他幣';
+    $('pick').placeholder = tw ? '選擇或輸入代號，例如 2330' : '選擇或輸入代號，例如 PEPE';
+    document.querySelector('.band h1').textContent = tw ? '台股操作建議（實驗性）' : '加密貨幣操作建議';
   }
 
   async function run(fromTimer = false) {
+    applyMarket();
+    if (isTW()) return runTW(fromTimer);
     const tf = $('tf').value;
     const N = +$('scan').value;
     savePrefs();
     $('go').disabled = true;
+    $('twnote').hidden = true;
     $('status').textContent = '讀取成交量排行…';
     const EX = $('ex').value;
     let scan, note = '';
@@ -606,8 +679,14 @@
   let p = {}; try { p = JSON.parse(localStorage.getItem('prefs')) || {}; } catch {}
   if (p.scan) $('scan').value = p.scan;
   if (p.ex) $('ex').value = p.ex;
+  if (p.mkt) $('mkt').value = p.mkt;
   // 查看其他幣：已掃描的直接顯示；沒掃到的代號當下才單獨下載
   async function pick() {
+    if (isTW()) {
+      const q = $('pick').value.trim(), hit = items.find(i => i.sym === q || i.label === q);
+      if (!hit) { $('status').textContent = `台股只提供上市市值前 ${items.length} 大，找不到「${q}」。`; return; }
+      selected = hit.sym; render(); $('detail').scrollIntoView({ behavior: 'smooth', block: 'start' }); return;
+    }
     const s = $('pick').value.trim().toUpperCase().replace(/USDT$/, '');
     if (!/^[A-Z0-9]{1,15}$/.test(s) || $('pickgo').disabled) return;
     if (!items.some(i => i.sym === s)) {
@@ -622,7 +701,7 @@
   }
   $('pickgo').onclick = pick;
   $('pick').onkeydown = e => { if (e.key === 'Enter') { e.preventDefault(); pick(); } };
-  $('pick').onchange = () => { if (items.some(i => i.sym === $('pick').value.trim().toUpperCase())) pick(); };
+  $('pick').onchange = () => { const q = $('pick').value.trim().toUpperCase(); if (items.some(i => i.sym === q || i.label === q)) pick(); };
   if (p.tf in TF) $('tf').value = p.tf;
   if (p.cap) $('cap').value = p.cap;
   if (p.risk) $('risk').value = p.risk;
@@ -631,8 +710,8 @@
   $('f').onsubmit = e => { e.preventDefault(); run(); };
   $('tf').onchange = () => run();
   $('cap').oninput = $('risk').oninput = () => { savePrefs(); render(); };
-  $('scan').onchange = $('ex').onchange = () => run();
-  $('rr').onchange = () => { if (items.length) seen = new Set(compute().map(n => n.key)); savePrefs(); };
+  $('scan').onchange = $('ex').onchange = $('mkt').onchange = () => { selected = null; run(); };
+  $('rr').onchange = () => { if (isTW()) return; if (items.length) seen = new Set(compute().map(n => n.key)); savePrefs(); };
   $('auto').onchange = async () => {
     if ($('auto').checked && 'Notification' in window && Notification.permission === 'default') await Notification.requestPermission();
     savePrefs(); run();
