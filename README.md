@@ -28,6 +28,8 @@
 | `research2.js` | 同一規則在 10 個幣上合併驗證 |
 | `research3.js` | 滾動式驗證：每年用之前資料重新挑規則 |
 | `research4.js` | 盈虧比 ≥ 1.5 時各種止損距離的滾動驗證比較 |
+| `research5.js` | 短週期（4 小時、1 小時、15 分鐘）的量價與資金費率反向策略：144 種組合，前 70% 挑、後 30% 驗；結果沒有一種在後段仍賺錢 |
+| `research6.js` | 資金費率套利（現貨＋放空合約）：歷史年化約 10%，但集中在 2020–2021，2025 年後接近 0 |
 
 研究腳本用法：`node research3.js 1d BTC ETH BNB SOL XRP DOGE ADA AVAX LINK TRX`（需要 Node 18 以上）。
 

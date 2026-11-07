@@ -213,7 +213,7 @@ async function klines(symbol, tf, q) {
   // 代號不存在時 Binance 回的錯誤沒有 CORS 標頭，瀏覽器只會丟出網路錯誤
   const res = await fetch(`${API}/klines?symbol=${symbol}&interval=${tf}&limit=1000${q}`).catch(() => null);
   if (!res || !res.ok) throw new Error(`${symbol}：取不到資料，請確認代號是否正確（Binance 現貨、以 USDT 計價）或網路是否正常`);
-  return (await res.json()).map(v => ({ t: v[0], o: +v[1], h: +v[2], l: +v[3], c: +v[4], T: v[6] }));
+  return (await res.json()).map(v => ({ t: v[0], o: +v[1], h: +v[2], l: +v[3], c: +v[4], v: +v[5], tb: +v[9], T: v[6] }));
 }
 
 // 已收盤的 K 線記在記憶體裡；之後只補抓最後一根之後的（自動更新時不必重抓整段歷史）
