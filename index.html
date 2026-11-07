@@ -384,7 +384,11 @@ ${exitTxt}`, text: head + sizeText(live, p, d, r),
     const q = `https://tw.stock.yahoo.com/quote/${it.sym}.${it.mkt}`, r = it.rev, a = (path, t) => `<a href="${q}/${path}" target="_blank" rel="noopener">${t}</a>`;
     const revTxt = !r ? '公開資訊觀測站沒有這檔的月營收資料，這條規則不會對它進場。'
       : `最新月營收（${r[0].replace('-', ' 年 ')} 月）年增 ${r[1] == null ? '—' : pct(r[1] / 100)}，${r[2] ? '<b>創 12 個月新高</b>' : '沒有創 12 個月新高（規則要創新高才會進場）'}。`;
+    const z = v => (v > 0 ? '買超 ' : v < 0 ? '賣超 ' : '') + Math.abs(v).toLocaleString() + ' 張', f = it.flow, days = twFlowDays;
+    const flowTxt = f ? `最近 5 個交易日${days.length ? `（${days[0].slice(5).replace('-', '/')}～${days.at(-1).slice(5).replace('-', '/')}）` : ''}：外資 ${z(f[0])}、投信 ${z(f[1])}、自營商 ${z(f[2])}。`
+      : '讀不到這檔的三大法人買賣超。';
     return `<h4>營收與消息</h4><p>${revTxt}</p>
+      <p>${flowTxt}</p><p class="meta">法人買賣超只供參考、不列入判斷：回測 2018 年起的資料，加上法人買超的條件並沒有比較好（研究十）。</p>
       <p class="meta">Yahoo 股市（另開視窗）：${a('news', '新聞')} · ${a('revenue', '月營收')} · ${a('eps', 'EPS')}。新聞不列入判斷：沒有可以回測的歷史資料，看了再自己決定要不要避開。</p>`;
   }
 
@@ -582,16 +586,16 @@ ${exitTxt}`, text: head + sizeText(live, p, d, r),
   }
 
   // 台股：讀雲端每天算好的 tw.json，轉成和加密貨幣相同的格式
-  let twCost = 0.00785, twValid = 0, twRule = { name: '', sl: 3, hold: 60 };
+  let twFlowDays = [], twCost = 0.00785, twValid = 0, twRule = { name: '', sl: 3, hold: 60 };
   async function runTW(fromTimer = false) {
     $('go').disabled = true;
     $('status').textContent = '讀取台股資料…';
     let j;
     try { const res = await fetch('tw.json', { cache: 'no-cache' }); if (!res.ok) throw 0; j = await res.json(); }
     catch { $('go').disabled = false; $('headline').textContent = '暫時讀不到台股資料'; $('reason').textContent = '台股資料由雲端每個交易日 14:40 後更新，請稍後再試。'; $('status').textContent = ''; return; }
-    twCost = j.cost; twValid = j.nValid ?? j.stocks.length; twRule = j.rule ?? twRule;
+    twCost = j.cost; twValid = j.nValid ?? j.stocks.length; twRule = j.rule ?? twRule; twFlowDays = j.flowDays ?? [];
     items = j.stocks.map(s => ({
-      sym: s.code, label: s.name, full: `${s.name}（${s.code}）`, tw: true, mkt: s.mkt, rev: s.rev, show: true, illiquid: s.illiquid, liq: s.liq, live: s.close, lastT: s.lastT,
+      sym: s.code, label: s.name, full: `${s.name}（${s.code}）`, tw: true, mkt: s.mkt, rev: s.rev, flow: s.flow, show: true, illiquid: s.illiquid, liq: s.liq, live: s.close, lastT: s.lastT,
       bars: s.chart ? s.chart.map(c => ({ t: c[0], o: c[1], h: c[2], l: c[3], c: c[4] })) : null,
       ma: s.chart ? s.chart.map(c => c[5]) : null,
       runs: [{ dir: 1, state: s.state, pos: s.pos, own: s.own, trades: [] }],

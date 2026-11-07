@@ -5,7 +5,7 @@ const fs = require('fs');
 const S = require('./strategy.js');
 const R = require('./tw-rule.js');
 const { send } = require('./telegram.js');
-const { TW_COST, universeAll, bars, revenue, addWeekdays } = require('./tw-data.js');
+const { TW_COST, universeAll, bars, revenue, flows, addWeekdays } = require('./tw-data.js');
 
 const REV = '.state/tw-rev.json'; // 月營收歷史，由 Actions 快取保存，每天只補抓缺的月份
 
@@ -39,6 +39,12 @@ async function loadRevenue() {
     if (++done % 200 === 0) console.log(`讀取中 ${done} / ${uni.length}`);
     try { const b = await bars(u.code, u.mkt); return b.length >= 500 ? { ...u, b } : null; } catch { return null; }
   })).filter(Boolean);
+  // 最近 5 個已公布的交易日法人買賣超（今天的下午 4 點才出來，14:40 跑時通常拿不到）
+  const ref = data.find(d => d.code === '2330') || data[0], ymd = t => new Date(t + 8 * 36e5).toISOString().slice(0, 10);
+  const fl = [];
+  for (const x of ref.b.slice(-7).reverse()) { if (fl.length === 5) break; const f = await flows(ymd(x.t)); if (f) fl.push([ymd(x.t), f]); }
+  console.log(`法人買賣超：${fl.map(f => f[0]).join('、') || '讀不到'}`);
+  const flowOf = code => { const v = fl.map(f => f[1][code]).filter(Boolean); return v.length ? [0, 1, 2].map(j => Math.round(v.reduce((s, x) => s + x[j], 0) / 1000)) : null; };
   for (const d of data) {
     const last20 = d.b.slice(-20);
     d.liq = last20.reduce((s, x) => s + x.val, 0) / last20.length;
@@ -61,6 +67,8 @@ async function loadRevenue() {
     const o = { code: d.code, name: d.name, mkt: d.mkt, close: price(b.at(-1).raw), lastT: b.at(-1).t, state: r.state, liq: Math.round(d.liq / 1e4),
       own: { n: r.own.n, win: r3(r.own.win), avg: r3(r.own.avg), worst: r3(r.own.worst), payoff: Number.isFinite(r.own.payoff) ? r3(r.own.payoff) : null } };
     if (!d.ok) o.illiquid = true;
+    const f5 = flowOf(d.code);
+    if (f5) o.flow = f5; // 最近 5 個交易日外資、投信、自營商淨買（張）
     if (d.f) o.rev = [d.f.ym, d.f.yoy1, d.f.high12 ? 1 : 0]; // 最新已公布月營收：月份、年增 %、是否創 12 個月新高
     // 還原權息價與實際價只在過去不同；最新一根相同，所以進場、止損、50 日均線直接用
     if (p) {
@@ -78,6 +86,7 @@ async function loadRevenue() {
 
   fs.writeFileSync('tw.json', JSON.stringify({
     updated: new Date().toISOString(), lastT, n: data.length, nValid: data.filter(d => d.ok).length, minLiq: R.MIN_LIQ, cost: TW_COST,
+    flowDays: fl.map(f => f[0]).reverse(),
     rule: { name: R.NAME, sl: R.SL, hold: R.HOLD },
     val: { pass: val.pass, rows: val.rows.map(r => ({ ...r, st: clean(r.st) })), wf: clean(val.wf), recent: clean(val.recent), total: clean(val.total),
       avgR: rs.length ? rs.reduce((s, v) => s + v, 0) / rs.length : 0, hold },

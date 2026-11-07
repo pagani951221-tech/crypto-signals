@@ -78,6 +78,22 @@ async function revenue(months) {
   return db;
 }
 
+// 三大法人買賣超（上市 T86＋上櫃 dailyTrade）某一天：{ 代號: [外資, 投信, 自營商] 淨買股數 }；還沒公布（約下午 4 點）回傳 null
+// 研究十：當進場濾網沒有讓回測變好，所以只在網頁上顯示參考
+async function flows(date) { // date：'YYYY-MM-DD'
+  const n = s => +String(s).replace(/,/g, '') || 0, ua = { headers: { 'User-Agent': 'Mozilla/5.0' } };
+  const get = url => fetch(url, ua).then(r => r.json()).catch(() => ({}));
+  const [a, b] = await Promise.all([
+    get(`https://www.twse.com.tw/rwd/zh/fund/T86?date=${date.replace(/-/g, '')}&selectType=ALLBUT0999&response=json`),
+    get(`https://www.tpex.org.tw/www/zh-tw/insti/dailyTrade?type=Daily&sect=EW&date=${date.replace(/-/g, '/')}&response=json`),
+  ]);
+  const t = (b.tables || []).find(t => t.data && t.data.length);
+  if (a.stat !== 'OK' || !t) return null;
+  const rows = [...a.data.map(r => [r[0], n(r[4]) + n(r[7]), n(r[10]), n(r[11])]),
+    ...t.data.map(r => t.fields.length === 16 ? [r[0], n(r[4]), n(r[7]), n(r[8])] : [r[0], n(r[4]), n(r[13]), n(r[22])])];
+  return Object.fromEntries(rows.map(r => [r[0].trim(), r.slice(1)]).filter(r => COMMON.test(r[0])));
+}
+
 // 往後數 n 個交易日（只跳過週末，沒扣國定假日，所以是「約」）
 function addWeekdays(t, n) {
   let x = t;
@@ -85,4 +101,4 @@ function addWeekdays(t, n) {
   return x;
 }
 
-module.exports = { TW_COST, ADJ, universe, universeAll, bars, revenue, addWeekdays };
+module.exports = { TW_COST, ADJ, universe, universeAll, bars, revenue, flows, addWeekdays };
