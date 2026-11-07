@@ -193,6 +193,7 @@
 
 <div class="controls">
   <form id="f" class="wrap">
+    <label class="scanl">交易所<select id="ex"><option value="ourbit" selected>只看 Ourbit 有的幣</option><option value="all">不限交易所</option></select></label>
     <label class="scanl">掃描範圍<select id="scan"><option value="50">成交量前 50 名</option><option value="100" selected>成交量前 100 名</option><option value="150">成交量前 150 名</option></select></label>
     <label class="num">週期<select id="tf"></select></label>
     <label class="num">本金（USDT）<input id="cap" type="number" min="0" step="any" inputmode="decimal" placeholder="例如 1000"></label>
@@ -230,7 +231,7 @@
 
   <section class="accuracy" aria-labelledby="acc-h">
     <h2 id="acc-h">預報準確度</h2>
-    <p>每次打開都在 10 個主流幣上重新做逐年滾動驗證（掃描範圍不影響這個判斷）：每年 1 月 1 日只看當時已經結束的交易，合併結果明顯賺錢（至少 50 筆、t 值 ≥ 2）才允許那一年交易；允許年份的成績也要賺錢（t 值 ≥ 1），而且到現在仍然允許，才會給出訊號。</p>
+    <p>每次打開都把掃描到的所有幣合併，重新做逐年滾動驗證：每年 1 月 1 日只看當時已經結束的交易，合併結果明顯賺錢（至少 50 筆、t 值 ≥ 2）才允許那一年交易；允許年份的成績也要賺錢（t 值 ≥ 1），而且到現在仍然允許，才會給出訊號。</p>
     <p class="exit" id="exit"></p>
     <div id="val"></div>
   </section>
@@ -239,7 +240,7 @@
     <div>
       <h2>這個預報怎麼來的</h2>
       <p>只用一條經過研究挑出的規則：站上 200 均線 ＋ MACD 在訊號線上 ＋ 突破前 20 根高點時做多；止損 3 ATR（最近 14 根 K 線的平均波動），止盈＝止損 × 你設定的盈虧比（預設 2 倍，最低 1.5 倍），20 根 K 線內都沒碰到就出場。放空版（三個條件反過來）一起測，當作對照。個別幣自己歷史上虧錢的也跳過。</p>
-      <p style="margin-top:8px">成本含單邊手續費 0.1%、滑價 0.05%，放空另計 Binance 永續合約的真實資金費率（合約上市前以每 8 小時扣 0.01% 估計）。因為有到期出場和交易成本，實際盈虧比會比設定值低一些。</p>
+      <p style="margin-top:8px">成本含單邊手續費 0.1%、滑價 0.05%，放空另以每 8 小時扣 0.01% 估計資金費率（出現放空訊號時，才抓該幣的真實資金費率確認有沒有合約）。歷史行情一律用 Binance 的資料。因為有到期出場和交易成本，實際盈虧比會比設定值低一些。</p>
     </div>
     <div>
       <h2>名詞</h2>
@@ -255,7 +256,7 @@
 
 <script src="https://unpkg.com/lightweight-charts@4.2.0/dist/lightweight-charts.standalone.production.js"></script>
 <!-- 改 strategy.js 時把 v 加 1，瀏覽器才會抓新版而不是用快取 -->
-<script src="strategy.js?v=9"></script>
+<script src="strategy.js?v=10"></script>
 <script>
   const $ = id => document.getElementById(id);
   const pct = v => (v >= 0 ? '+' : '−') + Math.abs(v * 100).toFixed(1) + '%';
@@ -369,7 +370,7 @@
   const yearColor = st => BANDS.find(b => st.avg >= b.min);
 
   function renderVal(ex) {
-    $('exit').textContent = `目前出場設定：止損 ${ex.sl} ATR、止盈 ${+ex.tp.toFixed(2)} ATR（設定盈虧比 ${+(ex.tp / ex.sl).toFixed(2)} 倍）。${TF[$('tf').value].label}，用 ${BASKET.join('、')} 合併計算。`;
+    $('exit').textContent = `目前出場設定：止損 ${ex.sl} ATR、止盈 ${+ex.tp.toFixed(2)} ATR（設定盈虧比 ${+(ex.tp / ex.sl).toFixed(2)} 倍）。${TF[$('tf').value].label}，用掃描到的 ${items.filter(i => i.show && i.runs).length} 個幣合併計算。`;
     $('val').innerHTML = [1, -1].map(d => {
       const v = val[d];
       const warn = v.pass && v.recent.n >= 10 && v.recent.avg <= 0
@@ -396,22 +397,20 @@
     }).join('');
   }
 
-  // 驗證用的 10 個幣抓完整歷史與資金費率；其餘的幣只抓最近 3000 根 K 線，資金費率等放空規則通過時才抓
+  // 每個掃描的幣都抓完整歷史（驗證要用）；15 分鐘只抓約 7 個月，避免請求太多。資金費率等放空規則通過時才抓
   async function one(sym, tf, prices) {
-    const full = BASKET.includes(sym);
     try {
-      const [bars, ev] = await Promise.all([fetchBars(sym + 'USDT', tf, full ? TF[tf].pages : Math.min(3, TF[tf].pages)),
-        full ? fetchFunding(sym + 'USDT').catch(() => []) : null]);
+      const bars = await fetchBars(sym + 'USDT', tf, tf === '15m' ? 20 : TF[tf].pages);
       if (bars.length < 500) throw new Error(`${sym}：歷史資料不足 500 根 K 線，無法回測`);
-      return { sym, bars, perp: ev ? ev.length > 0 : null, fund: fundingFn(ev || []), live: prices[sym] ?? bars.at(-1).c };
+      return { sym, bars, perp: null, fund: fundingFn([]), live: prices[sym] ?? bars.at(-1).c };
     } catch (e) { return { sym, err: e.message }; }
   }
 
   // 成交量排行記 12 小時，不必每次重算
-  async function scanList(n) {
-    const key = 'top' + n;
+  async function scanList(n, ex) {
+    const key = 'top-' + ex + '-' + n;
     try { const c = JSON.parse(localStorage.getItem(key)); if (c && Date.now() - c.t < 12 * 36e5) return c.list; } catch {}
-    const list = await topCoins(n);
+    const list = await topCoins(n, ex === 'ourbit' ? await ourbitCoins() : null);
     try { localStorage.setItem(key, JSON.stringify({ t: Date.now(), list })); } catch {}
     return list;
   }
@@ -488,14 +487,14 @@
     const rr = Math.max(MIN_RR, +$('rr').value || DEFAULT_RR), ex = exitFor(rr);
     if (+$('rr').value !== rr) $('rr').value = rr; // 低於 1.5 或空白時改回有效值
     for (const i of items) if (i.bars) i.runs = [1, -1].map(d => runRule(i.bars, d, i.fund, ex));
-    const basket = items.filter(i => BASKET.includes(i.sym) && i.runs);
-    for (const d of [1, -1]) val[d] = walkForward(basket.map(i => i.runs.find(r => r.dir === d)));
+    const pooled = items.filter(i => i.show && i.runs); // 掃描到的所有幣一起驗證（從選單另外查看的幣不算）
+    for (const d of [1, -1]) val[d] = walkForward(pooled.map(i => i.runs.find(r => r.dir === d)));
     renderVal(ex);
     return render();
   }
 
   function savePrefs() {
-    try { localStorage.setItem('prefs', JSON.stringify({ scan: $('scan').value, tf: $('tf').value, cap: $('cap').value, risk: $('risk').value, rr: $('rr').value, auto: $('auto').checked })); } catch {}
+    try { localStorage.setItem('prefs', JSON.stringify({ ex: $('ex').value, scan: $('scan').value, tf: $('tf').value, cap: $('cap').value, risk: $('risk').value, rr: $('rr').value, auto: $('auto').checked })); } catch {}
   }
 
   async function run(fromTimer = false) {
@@ -504,10 +503,11 @@
     savePrefs();
     $('go').disabled = true;
     $('status').textContent = '讀取成交量排行…';
+    const EX = $('ex').value;
     let scan, note = '';
-    try { scan = await scanList(N); } catch { scan = BASKET.slice(); note = ' 取不到成交量排行，這次只掃描 10 個主流幣。'; }
+    try { scan = await scanList(N, EX); } catch { scan = BASKET.slice(); note = ' 取不到成交量排行或交易所幣種清單，這次只掃描 10 個主流幣。'; }
     const prices = await allPrices().catch(() => ({}));
-    const list = [...new Set([...BASKET, ...scan])];
+    const list = scan;
     let done = 0;
     items = await pool(list, 8, async s => {
       const it = await one(s, tf, prices);
@@ -531,13 +531,11 @@
     seen = new Set(alerts.map(n => n.key));
     document.title = (alerts.length ? `(${alerts.length}) ` : '') + '加密貨幣操作建議';
     const T = Math.max(0, ...items.map(r => r.bars ? r.bars.at(-1).T : 0));
-    const missing = BASKET.length - items.filter(i => BASKET.includes(i.sym) && i.runs).length;
     $('issue').textContent = T ? `${TF[tf].label}預報 · 依 ${new Date(T + 1).toLocaleString('zh-TW', { month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit' })} 收盤發布` : '尚未取得資料';
     const scanned = items.filter(i => i.show && i.bars).length, skipped = items.filter(i => i.show && i.err).length;
     const act = items.filter(i => i.show && i.runs && judge(i).pri >= 2).length;
-    $('status').textContent = `掃描成交量前 ${N} 名，共 ${scanned} 個幣，${act} 個有機會操作。價格為即時價。`
-      + (skipped ? ` ${skipped} 個幣資料不足，已略過。` : '') + note
-      + (missing ? ` 驗證用的幣有 ${missing} 個取不到資料，驗證結果只含其餘的幣。` : '');
+    $('status').textContent = `掃描${EX === 'ourbit' ? ' Ourbit 有的' : ''}成交量前 ${N} 名，共 ${scanned} 個幣，${act} 個有機會操作。價格為即時價。`
+      + (skipped ? ` ${skipped} 個幣資料不足，已略過。` : '') + note;
     schedule();
   }
 
@@ -554,6 +552,7 @@
   $('tf').innerHTML = Object.entries(TF).map(([k, v]) => `<option value="${k}">${v.label}</option>`).join('');
   let p = {}; try { p = JSON.parse(localStorage.getItem('prefs')) || {}; } catch {}
   if (p.scan) $('scan').value = p.scan;
+  if (p.ex) $('ex').value = p.ex;
   // 查看其他幣：已掃描的直接顯示；沒掃到的代號當下才單獨下載
   async function pick() {
     const s = $('pick').value.trim().toUpperCase().replace(/USDT$/, '');
@@ -579,7 +578,7 @@
   $('f').onsubmit = e => { e.preventDefault(); run(); };
   $('tf').onchange = () => run();
   $('cap').oninput = $('risk').oninput = () => { savePrefs(); render(); };
-  $('scan').onchange = () => run();
+  $('scan').onchange = $('ex').onchange = () => run();
   $('rr').onchange = () => { if (items.length) seen = new Set(compute().map(n => n.key)); savePrefs(); };
   $('auto').onchange = async () => {
     if ($('auto').checked && 'Notification' in window && Notification.permission === 'default') await Notification.requestPermission();

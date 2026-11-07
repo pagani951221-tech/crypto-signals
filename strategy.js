@@ -264,15 +264,26 @@ async function pool(list, n, fn) {
 
 // 成交量前 n 名：排除穩定幣、黃金與槓桿代幣，並要求至少 18 個月歷史（新上市的股票代幣等資料不夠回測）
 const NOT_COIN = /^(USDC|FDUSD|TUSD|USDP|DAI|BUSD|EUR|EURI|AEUR|TRY|BRL|USD1|USDE|USDS|PYUSD|RLUSD|RWUSD|BFUSD|XUSD|U|PAXG|XAUT|WBTC|WBETH|BETH)$/;
-async function topCoins(n = 30) {
+async function topCoins(n = 30, allow = null) { // allow：只留這個集合裡的幣（例如某交易所買得到的）
   const res = await fetch(`${API}/ticker/24hr`).catch(() => null);
   if (!res || !res.ok) throw new Error('取不到成交量排行');
   const ranked = (await res.json()).filter(t => t.symbol.endsWith('USDT'))
     .map(t => ({ b: t.symbol.slice(0, -4), v: +t.quoteVolume }))
-    .filter(t => /^[A-Z0-9]{1,15}$/.test(t.b) && !NOT_COIN.test(t.b) && !/(UP|DOWN|BULL|BEAR)$/.test(t.b))
+    .filter(t => /^[A-Z0-9]{1,15}$/.test(t.b) && !NOT_COIN.test(t.b) && !/(UP|DOWN|BULL|BEAR)$/.test(t.b) && (!allow || allow.has(t.b)))
     .sort((a, b) => b.v - a.v).slice(0, n + 60);
   const months = await pool(ranked, 8, t => fetch(`${API}/klines?symbol=${t.b}USDT&interval=1M&limit=18`).then(r => r.ok ? r.json() : []).catch(() => []));
   return ranked.filter((t, i) => months[i].length >= 18).slice(0, n).map(t => t.b);
+}
+
+// Ourbit 買得到的幣（USDT 計價）。Ourbit 的 API 不允許網頁直接讀，所以網頁讀倉庫裡每週更新的 ourbit.json；Node 直接讀 API
+async function ourbitCoins() {
+  if (typeof window === 'undefined') {
+    const info = await (await fetch('https://api.ourbit.com/api/v3/exchangeInfo')).json();
+    return new Set(info.symbols.filter(s => s.quoteAsset === 'USDT' && s.status === 'ENABLED').map(s => s.baseAsset));
+  }
+  const res = await fetch('ourbit.json', { cache: 'no-cache' });
+  if (!res.ok) throw new Error('取不到 Ourbit 幣種清單');
+  return new Set((await res.json()).coins);
 }
 
 // 全部交易對的即時價，一次請求；回傳 { BTC: 76000, ... }（只取 USDT 計價）
@@ -290,7 +301,7 @@ async function livePrice(symbol) {
 
 if (typeof module !== 'undefined') {
   module.exports = { sma, ema, rsi, indicators, candidates, makeCand, backtest, stats, runRule, walkForward, sizing, freshness, coinOk, exitFor,
-    fetchBars, fundingFn, fetchFunding, allPrices, topCoins, pool, BASKET, TF, MAX_HOLD };
+    fetchBars, fundingFn, fetchFunding, allPrices, topCoins, ourbitCoins, pool, BASKET, TF, MAX_HOLD };
 
   if (require.main === module) (async () => {
     const assert = require('assert');

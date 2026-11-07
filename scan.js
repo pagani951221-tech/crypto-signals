@@ -2,7 +2,7 @@
 //   MODE=signals（每天日線收盤後）：新的進場訊號，以及今天收盤持有到期該出場的部位
 //   MODE=exits（每小時）：持有中的部位碰到止損或止盈（同一筆只通知一次，記在 .state/alerted.json）
 // 本機試跑：node scan.js（沒設定 TELEGRAM_BOT_TOKEN / TELEGRAM_CHAT_ID 時只印出訊息，不傳送）
-// 其他環境變數：SCAN（成交量前幾名，預設 100）、RR（盈虧比，預設 2）、TEST=true（沒有事件也傳一則摘要）
+// 其他環境變數：EXCHANGE（預設只看 Ourbit 有的幣；all＝不限）、SCAN（成交量前幾名，預設 100）、RR（盈虧比，預設 2）、TEST=true（沒有事件也傳一則摘要）
 const fs = require('fs');
 const S = require('./strategy.js');
 
@@ -36,15 +36,12 @@ async function send(text) {
   throw new Error(`Telegram 傳送失敗：HTTP ${res.status} ${why}`);
 }
 
-// 和網頁一樣：驗證用的 10 個幣抓完整歷史與資金費率，其餘只抓最近 3000 根
+// 和網頁一樣：每個掃描的幣都抓完整歷史；資金費率只在出現放空訊號時才抓
 async function load(sym, prices, ex) {
-  const full = S.BASKET.includes(sym);
   try {
-    const [bars, ev] = await Promise.all([S.fetchBars(sym + 'USDT', TF, full ? S.TF[TF].pages : 3),
-      full ? S.fetchFunding(sym + 'USDT').catch(() => []) : null]);
+    const bars = await S.fetchBars(sym + 'USDT', TF);
     if (bars.length < 500) return null;
-    const fund = S.fundingFn(ev || []);
-    return { sym, bars, ev, live: prices[sym] ?? bars.at(-1).c, runs: [1, -1].map(d => S.runRule(bars, d, fund, ex)) };
+    return { sym, bars, ev: null, live: prices[sym] ?? bars.at(-1).c, runs: [1, -1].map(d => S.runRule(bars, d, S.fundingFn([]), ex)) };
   } catch { return null; }
 }
 
@@ -62,10 +59,10 @@ const entryT = (it, p) => p.in < it.bars.length ? it.bars[p.in].t : it.bars.at(-
   const ex = S.exitFor(RR);
   const prices = await S.allPrices();
   let scan;
-  try { scan = await S.topCoins(N); } catch { scan = S.BASKET.slice(); }
-  const items = (await S.pool([...new Set([...S.BASKET, ...scan])], 8, s => load(s, prices, ex))).filter(Boolean);
-  const basket = items.filter(i => S.BASKET.includes(i.sym));
-  const val = { 1: S.walkForward(basket.map(i => i.runs[0])), [-1]: S.walkForward(basket.map(i => i.runs[1])) };
+  try { scan = await S.topCoins(N, process.env.EXCHANGE === 'all' ? null : await S.ourbitCoins()); } catch { scan = S.BASKET.slice(); }
+  const items = (await S.pool(scan, 8, s => load(s, prices, ex))).filter(Boolean);
+  // 掃描到的所有幣一起驗證
+  const val = { 1: S.walkForward(items.map(i => i.runs[0])), [-1]: S.walkForward(items.map(i => i.runs[1])) };
   // 和網頁的格子一致：規則通過、本幣歷史不虧、在掃描名單內
   const live = items.filter(it => scan.includes(it.sym)).flatMap(it => it.runs.filter(r => val[r.dir].pass && S.coinOk(r.own)).map(r => ({ it, r })));
   const weak = [1, -1].some(d => val[d].pass && val[d].recent.n >= 10 && val[d].recent.avg <= 0)
