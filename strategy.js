@@ -231,11 +231,21 @@ function freshness(pos, d, live) {
 
 const API = 'https://data-api.binance.vision/api/v3';
 
+// 被 Binance 限流（HTTP 429／418）時，所有請求一起暫停再重試。
+// 限流與代號錯誤的回應常沒有 CORS 標頭，瀏覽器只看得到「網路錯誤」，所以網路錯誤也當成可能被限流
+let pauseUntil = 0;
 async function klines(symbol, tf, q) {
-  // 代號不存在時 Binance 回的錯誤沒有 CORS 標頭，瀏覽器只會丟出網路錯誤
-  const res = await fetch(`${API}/klines?symbol=${symbol}&interval=${tf}&limit=1000${q}`).catch(() => null);
-  if (!res || !res.ok) throw new Error(`${symbol}：取不到資料，請確認代號是否正確（Binance 現貨、以 USDT 計價）或網路是否正常`);
-  return (await res.json()).map(v => ({ t: v[0], o: +v[1], h: +v[2], l: +v[3], c: +v[4], v: +v[5], tb: +v[9], T: v[6] }));
+  for (let attempt = 0; ; attempt++) {
+    const wait = pauseUntil - Date.now();
+    if (wait > 0) await new Promise(r => setTimeout(r, wait));
+    const res = await fetch(`${API}/klines?symbol=${symbol}&interval=${tf}&limit=1000${q}`).catch(() => null);
+    if (res && res.ok) return (await res.json()).map(v => ({ t: v[0], o: +v[1], h: +v[2], l: +v[3], c: +v[4], v: +v[5], tb: +v[9], T: v[6] }));
+    const limited = !res || res.status === 429 || res.status === 418;
+    if (!limited) throw new Error(`${symbol}：取不到資料（HTTP ${res.status}），請確認代號是否正確（Binance 現貨、以 USDT 計價）`);
+    if (attempt >= 2) throw Object.assign(new Error(`${symbol}：Binance 暫時限制請求次數，或網路中斷`), { limited: true });
+    const ra = res ? +res.headers.get('Retry-After') : 0;
+    pauseUntil = Math.max(pauseUntil, Date.now() + (ra > 0 ? Math.min(ra, 60) * 1000 : [5000, 20000][attempt]));
+  }
 }
 
 // 已收盤的 K 線記在記憶體裡；之後只補抓最後一根之後的（自動更新時不必重抓整段歷史）
@@ -293,8 +303,11 @@ async function topCoins(n = 30, allow = null) { // allow：只留這個集合裡
     .map(t => ({ b: t.symbol.slice(0, -4), v: +t.quoteVolume }))
     .filter(t => /^[A-Z0-9]{1,15}$/.test(t.b) && !NOT_COIN.test(t.b) && !/(UP|DOWN|BULL|BEAR)$/.test(t.b) && (!allow || allow.has(t.b)))
     .sort((a, b) => b.v - a.v).slice(0, n + 60);
-  const months = await pool(ranked, 8, t => fetch(`${API}/klines?symbol=${t.b}USDT&interval=1M&limit=18`).then(r => r.ok ? r.json() : []).catch(() => []));
-  return ranked.filter((t, i) => months[i].length >= 18).slice(0, n).map(t => t.b);
+  // 用月 K 數量判斷上市多久；被限流就整個失敗（不能回傳殘缺的清單，否則會被記住 12 小時）
+  const months = await pool(ranked, 8, t => klines(`${t.b}USDT`, '1M', '').catch(e => { if (e.limited) throw e; return []; }));
+  const list = ranked.filter((t, i) => months[i].length >= 18).slice(0, n).map(t => t.b);
+  if (list.length < Math.min(n, 10)) throw new Error('成交量排行的幣太少，可能是資料讀取異常');
+  return list;
 }
 
 // Ourbit 買得到的幣（USDT 計價）。Ourbit 的 API 不允許網頁直接讀，所以網頁讀倉庫裡每週更新的 ourbit.json；Node 直接讀 API

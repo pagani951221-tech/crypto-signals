@@ -266,7 +266,7 @@
 
 <script src="https://unpkg.com/lightweight-charts@4.2.0/dist/lightweight-charts.standalone.production.js"></script>
 <!-- 改 strategy.js 時把 v 加 1，瀏覽器才會抓新版而不是用快取 -->
-<script src="strategy.js?v=12"></script>
+<script src="strategy.js?v=14"></script>
 <script>
   const $ = id => document.getElementById(id);
   const pct = v => (v >= 0 ? '+' : '−') + Math.abs(v * 100).toFixed(1) + '%';
@@ -368,7 +368,14 @@
 
   function renderHeadline(shown) {
     const tf = $('tf').value, passed = [1, -1].filter(d => val[d].pass);
-    if (!shown.some(s => !s.item.err)) { $('headline').textContent = '沒有取得任何資料'; $('reason').textContent = '請確認網路連線後再按更新。'; return; }
+    if (!shown.some(s => !s.item.err)) {
+      const limited = shown.some(s => s.item.limited);
+      $('headline').textContent = limited ? '暫時讀不到 Binance 的資料' : '沒有取得任何資料';
+      $('reason').textContent = limited
+        ? 'Binance 暫時限制了這台電腦的請求次數（短時間內重新整理或切換週期太多次會發生），也可能是網路中斷。請等 2～3 分鐘再按「更新」。'
+        : '請確認網路連線後再按更新。';
+      return;
+    }
     if (!passed.length) {
       $('headline').textContent = `今日行動預報：${TF[tf].label}不建議操作`;
       $('reason').textContent = `${TF[tf].label}的規則沒有通過逐年滾動驗證，照技術訊號買賣在歷史上是虧的，所有幣都建議觀望。` + (tf !== '1d' ? '要看有效的預報，請把週期切換到日線。' : '');
@@ -423,10 +430,11 @@
   // 每個掃描的幣都抓完整歷史（驗證要用）；15 分鐘只抓約 7 個月，避免請求太多。資金費率等放空規則通過時才抓
   async function one(sym, tf, prices) {
     try {
+      if (Object.keys(prices).length && !(sym in prices)) throw new Error(`${sym}：Binance 沒有 ${sym}/USDT 交易對，無法分析`);
       const bars = await fetchBars(sym + 'USDT', tf, tf === '15m' ? 20 : TF[tf].pages);
       if (bars.length < 500) throw new Error(`${sym}：歷史資料不足 500 根 K 線，無法回測`);
       return { sym, bars, perp: null, fund: fundingFn([]), live: prices[sym] ?? bars.at(-1).c };
-    } catch (e) { return { sym, err: e.message }; }
+    } catch (e) { return { sym, err: e.message, limited: !!e.limited }; }
   }
 
   // 成交量排行記 12 小時，不必每次重算
@@ -562,10 +570,12 @@
     document.title = (alerts.length ? `(${alerts.length}) ` : '') + '加密貨幣操作建議';
     const T = Math.max(0, ...items.map(r => r.bars ? r.bars.at(-1).T : 0));
     $('issue').textContent = T ? `${TF[tf].label}預報 · 依 ${new Date(T + 1).toLocaleString('zh-TW', { month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit' })} 收盤發布` : '尚未取得資料';
-    const scanned = items.filter(i => i.show && i.bars).length, skipped = items.filter(i => i.show && i.err).length;
+    const scanned = items.filter(i => i.show && i.bars).length, limited = items.filter(i => i.show && i.limited).length;
+    const skipped = items.filter(i => i.show && i.err && !i.limited).length;
     const act = items.filter(i => i.show && i.runs && judge(i).pri >= 2).length;
     $('status').textContent = `掃描${EX === 'ourbit' ? ' Ourbit 有的' : ''}成交量前 ${N} 名，共 ${scanned} 個幣，${act} 個有機會操作。價格為即時價。`
-      + (skipped ? ` ${skipped} 個幣資料不足，已略過。` : '') + note;
+      + (skipped ? ` ${skipped} 個幣資料不足，已略過。` : '')
+      + (limited ? ` ${limited} 個幣因為 Binance 暫時限制請求次數（或網路中斷）沒讀到，等 2～3 分鐘再按「更新」。` : '') + note;
     schedule();
   }
 
