@@ -223,7 +223,7 @@
     <h2 id="headline">讀取行情中…</h2>
     <p id="reason"></p>
     <p id="status"></p>
-    <p class="alert" id="twnote" hidden><b>台股是實驗性質：</b>範圍是上市＋上櫃全部普通股。同一條規則扣掉手續費與證交稅（一來一回約 0.785%）後，在台股整體幾乎不賺錢，逐年滾動驗證目前沒有通過，所以不會給訊號；只用大型股時看起來有效，但那比較像碰上近幾年的多頭。近 20 天平均每天成交不到 1,000 萬元的股票不給訊號、也不列入驗證。資料每個交易日 14:40 後由雲端更新（來源：證交所、Yahoo Finance，價格為還原權息價）。只做多、不開槓桿，盈虧比固定 2 倍。</p>
+    <p class="alert" id="twnote" hidden><b>台股是實驗性質：</b>範圍是上市＋上櫃全部普通股，規則和加密貨幣不同：收盤創 52 週新高、且成交金額放大到近 20 天平均的 2 倍以上才買，跌破 50 日均線才賣。這條規則勝率只有約三成，是靠少數大漲的股票撐起平均，連續停損很正常；2017、2018、2022 年整年是虧的，賺錢集中在多頭年。近 20 天平均每天成交不到 1,000 萬元的股票不給訊號。資料每個交易日 14:40 後由雲端更新（來源：證交所、櫃買中心、Yahoo Finance，價格為還原權息價）。只做多、不開槓桿。</p>
     <div class="pick">
       <label for="pick" id="pickl">查看其他幣</label>
       <input id="pick" list="coinlist" autocomplete="off" spellcheck="false" placeholder="選擇或輸入代號，例如 PEPE">
@@ -271,7 +271,7 @@
 
 <script src="https://unpkg.com/lightweight-charts@4.2.0/dist/lightweight-charts.standalone.production.js"></script>
 <!-- 改 strategy.js 時把 v 加 1，瀏覽器才會抓新版而不是用快取 -->
-<script src="strategy.js?v=16"></script>
+<script src="strategy.js?v=17"></script>
 <script>
   const $ = id => document.getElementById(id);
   const pct = v => (v >= 0 ? '+' : '−') + Math.abs(v * 100).toFixed(1) + '%';
@@ -306,8 +306,8 @@
         <div><dt>投入（倉位價值）</dt><dd>${usdt(z.value)} ${cur}<small>${qtyText}，資金的 ${ofCap(z.value)}</small></dd></div>
         <div><dt>建議槓桿</dt><dd>${levText}<small>${z.lev > 1 ? `保證金 ${usdt(z.margin)} ${cur}，強平價約 ${price(z.liq)}` : `${tw ? '現股買進' : d > 0 ? '現貨直接買' : '放空要用合約'}，占用資金 ${usdt(z.margin)} ${cur}`}</small></dd></div>
         <div><dt>打到止損</dt><dd class="neg">−${usdt(z.loss)} ${cur}<small>資金的 −${ofCap(z.loss)}</small></dd></div>
-        <div><dt>打到止盈</dt><dd class="pos">+${usdt(z.gain)} ${cur}<small>資金的 +${ofCap(z.gain)}</small></dd></div>
-        <div class="wide"><dt>預期盈虧（歷史上每冒 1 元風險，平均${val[d].avgR >= 0 ? '賺' : '賠'} ${Math.abs(val[d].avgR).toFixed(2)} 元）</dt><dd>${z.expect >= 0 ? '+' : '−'}${usdt(Math.abs(z.expect))} ${cur}<small>資金的 ${pct(z.expect / cap)}；這是長期平均，單筆不是賺到止盈就是賠到止損</small></dd></div>
+        ${p.target == null ? '' : `<div><dt>打到止盈</dt><dd class="pos">+${usdt(z.gain)} ${cur}<small>資金的 +${ofCap(z.gain)}</small></dd></div>`}
+        <div class="wide"><dt>預期盈虧（歷史上每冒 1 元風險，平均${val[d].avgR >= 0 ? '賺' : '賠'} ${Math.abs(val[d].avgR).toFixed(2)} 元）</dt><dd>${z.expect >= 0 ? '+' : '−'}${usdt(Math.abs(z.expect))} ${cur}<small>資金的 ${pct(z.expect / cap)}；這是長期平均，${p.target == null ? '約七成的單會小賠出場，靠少數大賺的單撐起平均' : '單筆不是賺到止盈就是賠到止損'}</small></dd></div>
       </dl>
       ${z.capped ? (tw ? `<p class="alert">照每筆風險 ${risk * 100}% 需要的倉位超過你的資金，台股不開槓桿，所以倉位已縮小到全部資金。</p>`
         : `<p class="alert">照每筆風險 ${risk * 100}% 需要的槓桿太高，強平價會落在止損之前，所以倉位已縮小到 ${z.maxLev} 倍上限。</p>`) : ''}
@@ -320,6 +320,9 @@
   const holdText = (d, bars, p, held) => {
     const h = val[d].hold;
     if (!h || !h.n) return '';
+    if (p.target == null) return `<p class="holdline"><b>預計持有：</b>${held != null ? `已持有 ${dur(held)}；` : ''}歷史上通常 <b>${dur(h.med)}</b> 結束`
+      + `（碰到止損的一般 ${dur(h.stop)}、跌破 50 日均線的一般 ${dur(h.ma)}，${(h.timeShare * 100).toFixed(0)}% 持有到期才出場）。`
+      + `最長 ${twRule.hold} 個交易日，最晚約 <b>${when(p.deadline)}</b> 收盤出場。</p>`;
     return `<p class="holdline"><b>預計持有：</b>${held != null ? `已持有 ${dur(held)}；` : ''}歷史上通常 <b>${dur(h.med)}</b> 結束`
       + `（碰到止盈的一般 ${dur(h.target)}、碰到止損的一般 ${dur(h.stop)}，${(h.timeShare * 100).toFixed(0)}% 持有到期才出場）。`
       + `最長 ${MAX_HOLD} 根 K 線，最晚${isTW() ? '約' : ''} <b>${when(p.deadline ?? deadline(bars, p))}</b> 收盤出場。</p>`;
@@ -328,7 +331,8 @@
   const levels = p => `<dl class="levels">
       <div><dt>進場</dt><dd>${price(p.px)}</dd></div>
       <div><dt>止損</dt><dd>${price(p.stop)}<small>${pct(p.stop / p.px - 1)}</small></dd></div>
-      <div><dt>止盈</dt><dd>${price(p.target)}<small>${pct(p.target / p.px - 1)}</small></dd></div></dl>`;
+      ${p.target == null ? `<div><dt>出場線（50 日均線）</dt><dd>${price(p.ma)}<small>收盤跌破就出場</small></dd></div>`
+        : `<div><dt>止盈</dt><dd>${price(p.target)}<small>${pct(p.target / p.px - 1)}</small></dd></div>`}</dl>`;
 
   // 一個方向的判斷：pri 越高越優先決定這個幣的標籤；one＝格子裡的一行字，text＝詳細面板內容
   function lineFor(r, item) {
@@ -339,15 +343,17 @@
     if (r.state === 'wait') return wait('尚無訊號', `<p>尚未出現${s}訊號。訊號只在 K 線收盤後變動。</p>`);
     const f = freshness(p, d, live);
     if (r.state === 'enter') {
-      const head = `<p>最新 K 線收盤出現${s}訊號${isTW() ? '，下一個交易日開盤附近買進' : ''}，${MAX_HOLD} 根 K 線內兩邊都沒碰到就市價出場。</p>${levels(p)}${holdText(d, bars, p)}`;
+      const head = (p.target == null ? `<p>今天收盤出現${s}訊號，下一個交易日開盤附近買進。盤中碰到止損就出場；沒有固定止盈，收盤跌破 50 日均線、或持有滿 ${twRule.hold} 個交易日就出場。</p>`
+        : `<p>最新 K 線收盤出現${s}訊號${isTW() ? '，下一個交易日開盤附近買進' : ''}，${MAX_HOLD} 根 K 線內兩邊都沒碰到就市價出場。</p>`) + `${levels(p)}${holdText(d, bars, p)}`;
       if (f !== 'ok') return { pri: 1, k: 'wait', label: '觀望', one: '訊號已過時，不追', text: `${head}<p class="alert">即時價 ${price(live)} ${FRESH[f]}，不建議進場。</p>` };
+      const exitTxt = p.target == null ? `跌破 ${price(p.ma)} 出場` : `止盈 ${price(p.target)}`;
       return { pri: 3, k: d > 0 ? 'long' : 'short', label: s, one: `止損 ${price(p.stop)}
-止盈 ${price(p.target)}`, text: head + sizeText(live, p, d, r),
-        alert: { key: `${d}|${item.lastT ?? bars.at(-1).t}`, body: `${s}　進場約 ${price(live)}　止損 ${price(p.stop)}　止盈 ${price(p.target)}` } };
+${exitTxt}`, text: head + sizeText(live, p, d, r),
+        alert: { key: `${d}|${item.lastT ?? bars.at(-1).t}`, body: `${s}　進場約 ${price(live)}　止損 ${price(p.stop)}　${exitTxt}` } };
     }
     const now = `<p>規則已在 ${when(p.t ?? bars[p.in].t)} ${s}，${isTW() ? '收盤價' : '即時價'} ${price(live)}（${pct(d * (live / p.px - 1))}）。</p>${levels(p)}${holdText(d, bars, p, p.held ?? bars.length - p.in)}`;
     if (f === 'stop' || f === 'target') return { pri: 1, k: 'wait', label: '觀望', one: `已到${f === 'stop' ? '止損' : '止盈'}位`, text: `${now}<p class="alert">即時價已到${f === 'stop' ? '止損' : '止盈'}位，這筆應已出場，等下一次訊號。</p>` };
-    return { pri: 2, k: 'hold', label: d > 0 ? '持有多單' : '持有空單', one: `${pct(d * (live / p.px - 1))} 持有中`, text: `${now}<p>已進場者照這組止損止盈續抱；未進場者不追價，等下一次訊號。</p>` };
+    return { pri: 2, k: 'hold', label: d > 0 ? '持有多單' : '持有空單', one: `${pct(d * (live / p.px - 1))} 持有中`, text: `${now}<p>已進場者照這組${p.target == null ? '止損與 50 日均線' : '止損止盈'}續抱；未進場者不追價，等下一次訊號。</p>` };
   }
 
   // 一個幣的總判斷：取所有已通過方向中優先度最高的
@@ -401,7 +407,7 @@
     }
     if (!passed.length) {
       $('headline').textContent = `今日行動預報：${TF[tf].label}不建議操作`;
-      $('reason').textContent = isTW() ? '這條規則在台股全部股票上沒有通過逐年滾動驗證，扣掉成本後幾乎不賺錢，所有股票都建議觀望。下方可以看逐年成績。' : `${TF[tf].label}的規則沒有通過逐年滾動驗證，照技術訊號買賣在歷史上是虧的，所有幣都建議觀望。` + (tf !== '1d' ? '要看有效的預報，請把週期切換到日線。' : '');
+      $('reason').textContent = isTW() ? '台股規則目前沒有通過逐年滾動驗證，所有股票都建議觀望。下方可以看逐年成績。' : `${TF[tf].label}的規則沒有通過逐年滾動驗證，照技術訊號買賣在歷史上是虧的，所有幣都建議觀望。` + (tf !== '1d' ? '要看有效的預報，請把週期切換到日線。' : '');
       return;
     }
     const act = shown.filter(s => s.j.pri === 3), hold = shown.filter(s => s.j.pri === 2);
@@ -410,7 +416,7 @@
       : [...act.map(s => `${s.item.label ?? s.item.sym} 可${s.j.label}`), ...hold.map(s => `${s.item.label ?? s.item.sym} ${s.j.label}`)];
     const rest = shown.length - act.length - hold.length;
     $('headline').textContent = '今日行動預報：' + (parts.length ? parts.join('、') + (rest ? '，其餘觀望' : '') : '全部觀望');
-    $('reason').textContent = act.length ? `點有訊號的${isTW() ? '股票' : '幣'}看進場、止損、止盈與建議倉位。` : hold.length ? '持有中的部位照原本的止損止盈處理；沒有新的進場訊號。' : `規則仍然有效，只是還沒有任何${isTW() ? '股票' : '幣'}出現進場訊號。訊號只在每根 K 線收盤後變動。`;
+    $('reason').textContent = act.length ? `點有訊號的${isTW() ? '股票看進場、止損、出場線' : '幣看進場、止損、止盈'}與建議倉位。` : hold.length ? '持有中的部位照原本的止損止盈處理；沒有新的進場訊號。' : `規則仍然有效，只是還沒有任何${isTW() ? '股票' : '幣'}出現進場訊號。訊號只在每根 K 線收盤後變動。`;
   }
 
   // 像雨量圖的分級色帶：每級的字色都選過對比
@@ -424,7 +430,7 @@
 
   function renderVal(ex) {
     $('exit').textContent = isTW()
-      ? `台股（實驗性）：止損 3 ATR、止盈 6 ATR（盈虧比固定 2 倍），只做多。日線，用上市櫃 ${twValid} 檔成交量足夠的股票合併計算，成本一來一回約 ${(twCost * 100).toFixed(3)}%。`
+      ? `台股專用規則（實驗性），只做多：止損 ${twRule.sl} ATR；沒有固定止盈，收盤跌破 50 日均線出場，最多 ${twRule.hold} 個交易日。日線，上市櫃 ${items.length} 檔一起計算（進場當下近 20 天平均每天成交要 1,000 萬元以上），成本一來一回約 ${(twCost * 100).toFixed(3)}%。`
       : `目前出場設定：止損 ${ex.sl} ATR、止盈 ${+ex.tp.toFixed(2)} ATR（設定盈虧比 ${+(ex.tp / ex.sl).toFixed(2)} 倍）。${TF[$('tf').value].label}，用掃描到的 ${items.filter(i => i.show && i.runs).length} 個幣合併計算。`;
     $('val').innerHTML = (isTW() ? [1] : [1, -1]).map(d => {
       const v = val[d];
@@ -438,7 +444,7 @@
       }).join('');
       const years = v.rows.map(r => `<tr><td>${r.y}</td><td>${r.on ? '允許' : '不允許'}</td>${statCells(r.st)}</tr>`).join('');
       return `<article class="rule">
-        <div class="top"><h3>${SIDE(d)}規則：${esc(ruleName(RULE.ids, d))}</h3><span class="verdict ${v.pass ? 'pass' : 'fail'}">${v.pass ? '通過，會給訊號' : '未通過，不給訊號'}</span></div>
+        <div class="top"><h3>${SIDE(d)}規則：${esc(isTW() ? twRule.name : ruleName(RULE.ids, d))}</h3><span class="verdict ${v.pass ? 'pass' : 'fail'}">${v.pass ? '通過，會給訊號' : '未通過，不給訊號'}</span></div>
         ${warn}
         <div class="strip" role="list" aria-label="${SIDE(d)}規則逐年平均每筆報酬">${strip}</div>
         <div class="legend"><span class="keys" role="list" aria-label="每年平均每筆的顏色分級">${[...BANDS].reverse().map(b => `<span role="listitem"><i style="background:${b.bg}"></i>${b.label}</span>`).join('')}</span><span><i style="background:repeating-linear-gradient(135deg,#F1F4F7 0 5px,#E2E8EE 5px 7px)"></i>斜線＝依之前資料不允許交易，數字只是假設有做的結果</span></div>
@@ -503,7 +509,7 @@
       chart.applyOptions({ timeScale: { timeVisible: tf !== '1d' } });
       if (key !== chartKey) {
         chart.timeScale().setVisibleLogicalRange({ from: bars.length - 160, to: bars.length + 6 });
-        if (hit.tw) { if (ws) { const w = ws; ws = null; w.close(); } $('chart-meta').className = ''; $('chart-meta').textContent = '收盤資料，每個交易日 14:40 後更新'; }
+        if (hit.tw) { if (ws) { const w = ws; ws = null; w.close(); } $('chart-meta').className = ''; $('chart-meta').textContent = '收盤資料，每個交易日 14:40 後更新 · 灰線是 50 日均線'; }
         else live(hit.sym, tf);
       }
       chartKey = key; chartBars = hit.bars;
@@ -514,7 +520,7 @@
       { price: r.pos.px, color: '#1B2430', lineStyle: 0, title: '進場' },
       { price: r.pos.stop, color: '#A4501A', lineStyle: 2, title: '止損' },
       { price: r.pos.target, color: '#174A7C', lineStyle: 2, title: '止盈' },
-    ].map(o => candles.createPriceLine({ ...o, lineWidth: 1, axisLabelVisible: true }));
+    ].filter(o => o.price != null).map(o => candles.createPriceLine({ ...o, lineWidth: 1, axisLabelVisible: true }));
   }
   function live(sym, tf) {
     if (ws) ws.close();
@@ -566,14 +572,14 @@
   }
 
   // 台股：讀雲端每天算好的 tw.json，轉成和加密貨幣相同的格式
-  let twCost = 0.00785, twValid = 0;
+  let twCost = 0.00785, twValid = 0, twRule = { name: '', sl: 3, hold: 60 };
   async function runTW(fromTimer = false) {
     $('go').disabled = true;
     $('status').textContent = '讀取台股資料…';
     let j;
     try { const res = await fetch('tw.json', { cache: 'no-cache' }); if (!res.ok) throw 0; j = await res.json(); }
     catch { $('go').disabled = false; $('headline').textContent = '暫時讀不到台股資料'; $('reason').textContent = '台股資料由雲端每個交易日 14:40 後更新，請稍後再試。'; $('status').textContent = ''; return; }
-    twCost = j.cost; twValid = j.nValid ?? j.stocks.length;
+    twCost = j.cost; twValid = j.nValid ?? j.stocks.length; twRule = j.rule ?? twRule;
     items = j.stocks.map(s => ({
       sym: s.code, label: s.name, full: `${s.name}（${s.code}）`, tw: true, show: true, illiquid: s.illiquid, liq: s.liq, live: s.close, lastT: s.lastT,
       bars: s.chart ? s.chart.map(c => ({ t: c[0], o: c[1], h: c[2], l: c[3], c: c[4] })) : null,
@@ -635,11 +641,13 @@
     const prices = await allPrices().catch(() => ({}));
     const list = scan;
     let done = 0;
-    items = await pool(list, 8, async s => {
+    const got = await pool(list, 8, async s => {
       const it = await one(s, tf, prices);
-      $('status').textContent = `掃描中… ${++done} / ${list.length}（第一次開啟或切換週期較久）`;
+      if (!isTW()) $('status').textContent = `掃描中… ${++done} / ${list.length}（第一次開啟或切換週期較久）`;
       return it;
     });
+    if (isTW()) return; // 掃描途中切到台股：丟掉這次結果，不要蓋掉台股畫面
+    items = got;
     chartKey = null; // 重新整理後一律重新連線即時串流
     items.forEach(i => i.show = scan.includes(i.sym));
     let alerts = compute();
@@ -648,6 +656,7 @@
     if (need.length) {
       $('status').textContent = '放空規則通過，補抓資金費率中…';
       await pool(need, 4, async i => { const ev = await fetchFunding(i.sym + 'USDT').catch(() => []); i.perp = ev.length > 0; i.fund = fundingFn(ev); });
+      if (isTW()) return;
       alerts = compute();
     }
     $('go').disabled = false;

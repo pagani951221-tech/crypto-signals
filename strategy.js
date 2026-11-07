@@ -241,6 +241,7 @@ function plan(capital, riskPct, entry, stop, target, d, avgR, opt = {}) {
 // 訊號出現後價格又動了多少：stop / target（已碰到，作廢）、late（已走完一半止盈距離，不追）、ok
 function freshness(pos, d, live) {
   if (d * (live - pos.stop) <= 0) return 'stop';
+  if (pos.target == null) return 'ok'; // 台股規則沒有固定止盈，靠收盤跌破 50 日均線出場
   if (d * (live - pos.target) >= 0) return 'target';
   return d * (live - pos.px) / Math.abs(pos.target - pos.px) > 0.5 ? 'late' : 'ok';
 }
