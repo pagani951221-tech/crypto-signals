@@ -61,7 +61,7 @@ const V = [
   let scan; try { scan = await S.topCoins(100, await S.ourbitCoins()); } catch (e) { console.log('取不到排行，用主流幣', e.message); scan = S.BASKET; }
   const data = (await S.pool(scan, 8, async s => { try { const b = await S.fetchBars(s + 'USDT', '1d'); return b.length >= 500 ? { s, b, x: S.indicators(b) } : null; } catch { return null; } })).filter(Boolean);
   // 檢查：「隔天開盤買」要和網站用的 backtest 完全一樣
-  const ex = S.exitFor(2), official = data.flatMap(d => S.runRule(d.b, 1, S.fundingFn([]), ex).trades);
+  const ex = S.exitFor(2), official = data.flatMap(d => S.runRule(d.b, 1, S.fundingFn([]), ex, Infinity).trades);
   const mine = data.flatMap(d => run(d.b, d.x, signals(d.x), V[0][1]).trades);
   require('assert').strictEqual(mine.length, official.length, `隔天開盤買 ${mine.length} 筆，和網站回測 ${official.length} 筆不同`);
   require('assert').ok(Math.abs(S.stats(mine).avg - S.stats(official).avg) < 1e-9, '平均和網站回測不同');

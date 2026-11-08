@@ -12,7 +12,7 @@ const SL = [1.5, 2, 2.5, 3], RR = [1.33, 1.5, 2, 2.5, 3];
   const pct = v => (v * 100).toFixed(2) + '%', rows = [];
   for (const sl of SL) for (const rr of RR) {
     const ex = { sl, tp: +(sl * rr).toFixed(2) };
-    const w = walkForward(data.map(d => runRule(d.bars, 1, d.fund, ex)));
+    const w = walkForward(data.map(d => runRule(d.bars, 1, d.fund, ex, Infinity)));
     rows.push({ 止損ATR: sl, 止盈ATR: ex.tp, 設定盈虧比: rr, 通過: w.pass ? '是' : '否',
       滾動_筆數: w.wf.n, 滾動_勝率: pct(w.wf.win), 實際盈虧比: w.wf.payoff.toFixed(2), 兩平勝率: pct(w.wf.be),
       平均每筆: pct(w.wf.avg), t: w.wf.t.toFixed(1), 近12月平均: pct(w.recent.avg), 最差單筆: pct(w.total.worst) });

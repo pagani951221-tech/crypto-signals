@@ -19,7 +19,7 @@ const line = (label, w) => `${label}：全部 ${w.total.n} 筆 勝率 ${(w.total
   // 1) 原規則與幾組出場
   console.log('\n【原規則：站上 200 均線＋MACD 在訊號線上＋突破前 20 根高點，做多】');
   for (const ex of [{ sl: 3, tp: 6 }, { sl: 3, tp: 4.5 }, { sl: 2, tp: 4 }, { sl: 2, tp: 6 }]) {
-    const w = S.walkForward(twCost(data.map(d => S.runRule(d.b, 1, S.fundingFn([]), ex))));
+    const w = S.walkForward(twCost(data.map(d => S.runRule(d.b, 1, S.fundingFn([]), ex, Infinity))));
     console.log(line(`止損 ${ex.sl}／止盈 ${ex.tp} ATR`, w));
     if (ex.tp === 6 && ex.sl === 3) console.log('   逐年：' + w.rows.map(r => `${r.y}${r.on ? '' : '(不允許)'} ${r.st.n ? pct(r.st.avg) : '—'}/${r.st.n}`).join('  '));
   }

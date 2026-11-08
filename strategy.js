@@ -11,6 +11,8 @@ const FUND = 0.0001;
 const H8 = 288e5;     // 8 小時（毫秒），資金費率結算週期
 const WARMUP = 200;   // 200 均線需要的暖機根數
 const MAX_HOLD = 20;  // 止損止盈都沒碰到時，最多持有幾根 K 線
+const MAX_STOP = 0.2; // 做多的止損距離上限（研究二十二）
+const MAX_STOP_FROM = Date.UTC(2026, 10, 7); // 上限開始生效的日期
 const MAX_K = 3;      // research 腳本最多組合幾個條件
 // 研究選出的規則：做多版是主策略，放空版是鏡像對照組。止損 3 ATR，止盈＝止損 × 盈虧比
 // 盈虧比預設 2、最低 1.5（research4.js：設 2 倍時實際盈虧比約 1.5，設 1.5 倍實際只有約 1.3）
@@ -168,9 +170,12 @@ function stats(tr) {
 }
 
 // 一個幣、一個方向跑主規則
-function runRule(bars, dir, fund, ex = RULE.ex) {
+function runRule(bars, dir, fund, ex = RULE.ex, maxStop = MAX_STOP) {
   const x = indicators(bars);
   const cand = makeCand(condOn(x, bars.length, dir), RULE.ids, dir);
+  // 做多：止損距離超過上限的不做（波動太大的幣虧損太深）。上限生效前已發出、可能還持有的訊號照舊，才不會突然沒有出場通知
+  const barMs = bars[1].t - bars[0].t, tooFar = i => ex.sl * x.atr[i] / x.c[i] > maxStop;
+  if (dir > 0) cand.sig = cand.sig.map((v, i) => v && (!tooFar(i) || (bars[i].t < MAX_STOP_FROM && bars[i].t >= MAX_STOP_FROM - MAX_HOLD * barMs)));
   const r = backtest(bars, x, cand, ex, fund);
   return { dir, name: cand.name, ...r, own: stats(r.trades) };
 }
@@ -414,6 +419,13 @@ if (typeof module !== 'undefined') {
     b = flat(); b[203].l = 97;                            // 放空持有第 201～203 天，期間收到 9 次 +0.02% 資金費
     const ev = Array.from({ length: 230 * 3 }, (_, k) => ({ t: k * H8, r: 0.0002 }));
     near(backtest(b, x, { dir: -1, sig: b.map((_, i) => i === 200) }, ex, fundingFn(ev)).trades[0].ret, 0.02 - COST + 9 * 0.0002);
+    // 止損距離上限：太遠的訊號不做；生效前 20 根內的訊號照舊
+    const mk = t0 => Array.from({ length: 300 }, (_, i) => { const c = i < 250 ? 100 : 100 * 1.02 ** (i - 249); return { t: t0 + i * 864e5, o: c, h: c * 1.001, l: c * 0.999, c }; });
+    const hasTrade = r => r.trades.length > 0 || !!r.pos;
+    const late = mk(MAX_STOP_FROM + 864e5), edge = mk(MAX_STOP_FROM - 255 * 864e5);
+    assert.ok(hasTrade(runRule(late, 1, NO_FUNDING, RULE.ex, Infinity)));
+    assert.ok(!hasTrade(runRule(late, 1, NO_FUNDING, RULE.ex, 0)));
+    assert.ok(hasTrade(runRule(edge, 1, NO_FUNDING, RULE.ex, 0)));
     // 滾動式驗證：2020 年之前沒有交易 → 2020 不允許；2020 的 60 筆賺錢 → 2021 允許
     const tr = (y, k) => Array.from({ length: k }, (_, j) => ({ t: Date.UTC(y, 1, 1), T: Date.UTC(y, 2, 1), ret: j % 2 ? 0.02 : 0.001 }));
     const w = walkForward([{ trades: [...tr(2020, 60), ...tr(2021, 40)] }]);
