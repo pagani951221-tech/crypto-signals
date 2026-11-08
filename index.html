@@ -353,9 +353,10 @@
 ${exitTxt}`, text: head + sizeText(live, p, d, r),
         alert: { key: `${d}|${item.lastT ?? bars.at(-1).t}`, body: `${s}　進場約 ${price(live)}　止損 ${price(p.stop)}　${exitTxt}` } };
     }
-    const now = `<p>規則已在 ${when(p.t ?? bars[p.in].t)} ${s}，${isTW() ? '收盤價' : '即時價'} ${price(live)}（${pct(d * (live / p.px - 1))}）。</p>${levels(p)}${holdText(d, bars, p, p.held ?? bars.length - p.in)}`;
+    const held = p.held ?? bars.length - p.in;
+    const now = `<p>規則已在 ${when(p.t ?? bars[p.in].t)} ${s}，${isTW() ? '收盤價' : '即時價'} ${price(live)}（${pct(d * (live / p.px - 1))}）。</p>${levels(p)}${holdText(d, bars, p, held)}`;
     if (f === 'stop' || f === 'target') return { pri: 1, k: 'wait', label: '觀望', one: `已到${f === 'stop' ? '止損' : '止盈'}位`, text: `${now}<p class="alert">即時價已到${f === 'stop' ? '止損' : '止盈'}位，這筆應已出場，等下一次訊號。</p>` };
-    return { pri: 2, k: 'hold', label: d > 0 ? '持有多單' : '持有空單', one: `${pct(d * (live / p.px - 1))} 持有中`, text: `${now}<p>已進場者照這組${p.target == null ? '止損與 50 日均線' : '止損止盈'}續抱；未進場者不追價，等下一次訊號。</p>` };
+    return { pri: 2, k: 'hold', label: d > 0 ? '持有多單' : '持有空單', one: `${pct(d * (live / p.px - 1))}，已持有 ${dur(held)}${isTW() ? `（最多 ${twRule.hold}）` : ''}`, text: `${now}<p>已進場者照這組${p.target == null ? '止損與 50 日均線' : '止損止盈'}續抱；未進場者不追價，等下一次訊號。</p>` };
   }
 
   // 一個幣的總判斷：取所有已通過方向中優先度最高的
