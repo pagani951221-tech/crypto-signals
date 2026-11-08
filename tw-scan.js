@@ -97,7 +97,7 @@ async function loadRevenue() {
       const entryT = p.in < b.length ? b[p.in].t : addWeekdays(b.at(-1).t, 1);
       const q = { px: price(p.px), stop: price(p.stop), target: null, ma: price(ma50.at(-1)), t: entryT,
         held: p.in < b.length ? b.length - p.in : null, deadline: addWeekdays(entryT, R.HOLD - 1) + CLOSE };
-      if (p.beOn) q.beOn = true;
+      if (p.beOn) { q.beOn = true; q.bePx = price(p.bePx); }
       if (p.re) q.re = true;
       if (p.in < b.length) { // 轉弱檢查（只給人參考）：收在 20 日均線下、離持有期間最高收盤多遠、近 20 天比大盤強弱
         const cs = b.map(x => x.c), top = Math.max(...cs.slice(p.in));
@@ -106,9 +106,9 @@ async function loadRevenue() {
       return q;
     };
     if (p) o.pos = posOf(p);
-    // 網頁「保本出場」設定的各級版本（研究十八、十九）：曾賺到門檻後止損拉到成本，保本出場後 60 天內再創新高就重新進場
+    // 網頁「保本出場」設定的各級版本（研究十八～二十）：曾賺到門檻後，盤中碰到成本價且收盤仍在成本以下就出場（近似「收盤前一小時仍在線下」）；保本出場後 60 天內再創新高就重新進場
     for (const lv of [0.1, 0.15, 0.2, 0.3]) {
-      const v = R.run(b, rev[d.code] || {}, { be: lv, reenter: 'high' }), lt = v.trades.at(-1);
+      const v = R.run(b, rev[d.code] || {}, { be: lv, beAt: 'close', reenter: 'high' }), lt = v.trades.at(-1);
       const closed = lt && lt.out === b.length - 1 && lt.why === 'be' ? { exit: price(lt.exit) } : null;
       if (!v.pos && !v.re && !closed) continue;
       (o.be ||= {})[lv] = { state: v.state, ...(v.pos ? { pos: posOf(v.pos) } : {}), ...(v.re ? { re: { top: price(v.re.top), left: v.re.until - (b.length - 1) } } : {}), ...(closed ? { closed } : {}) };

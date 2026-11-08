@@ -212,7 +212,7 @@
     <label class="num cr">週期<select id="tf"></select></label>
     <label class="num"><span id="capl">目前資金（USDT）</span><input id="cap" type="number" min="0" step="any" inputmode="decimal" placeholder="例如 1000"></label>
     <label class="num">每筆風險 %<input id="risk" type="number" min="0.1" max="10" step="0.1" value="1"></label>
-    <label class="scanl twonly" hidden>保本出場<select id="be"><option value="0">不使用</option><option value="0.1">曾賺 10% 後回到成本就賣</option><option value="0.15">曾賺 15% 後回到成本就賣</option><option value="0.2">曾賺 20% 後回到成本就賣</option><option value="0.3">曾賺 30% 後回到成本就賣</option></select></label>
+    <label class="scanl twonly" hidden>保本出場<select id="be"><option value="0">不使用</option><option value="0.1">曾賺 10% 後跌回成本就賣</option><option value="0.15">曾賺 15% 後跌回成本就賣</option><option value="0.2">曾賺 20% 後跌回成本就賣</option><option value="0.3">曾賺 30% 後跌回成本就賣</option></select></label>
     <label class="num cr">盈虧比（倍）<input id="rr" type="number" min="1.5" max="5" step="0.1" value="2"></label>
     <button id="go">更新</button>
     <label class="auto"><input id="auto" type="checkbox">每根 K 線收盤後自動更新，有新的進場訊號時跳出通知（頁面需保持開啟）</label>
@@ -334,7 +334,8 @@
 
   const levels = p => `<dl class="levels">
       <div><dt>進場</dt><dd>${price(p.px)}</dd></div>
-      <div><dt>${p.beOn ? '止損（保本設定：已拉到成本）' : '止損'}</dt><dd>${price(p.stop)}<small>${p.beOn ? '建議在券商掛這個價格的停損單' : pct(p.stop / p.px - 1)}</small></dd></div>
+      <div><dt>止損</dt><dd>${price(p.stop)}<small>${pct(p.stop / p.px - 1)}</small></dd></div>
+      ${p.beOn ? `<div><dt>保本線（你的設定）</dt><dd>${price(p.bePx)}<small>盤中跌到這裡，而且 12:30（收盤前一小時）仍在這裡以下就賣</small></dd></div>` : ''}
       ${p.target == null ? `<div><dt>出場線（50 日均線）</dt><dd>${price(p.ma)}<small>收盤跌破就出場</small></dd></div>`
         : `<div><dt>止盈</dt><dd>${price(p.target)}<small>${pct(p.target / p.px - 1)}</small></dd></div>`}
 </dl>`;
@@ -345,8 +346,8 @@
     const wait = (one, text) => ({ pri: 0, k: 'wait', label: '觀望', one, text });
     if (d < 0 && item.perp === false) return wait('無合約，不能放空', '<p>此幣在 Binance 沒有 USDT 永續合約，無法放空。</p>');
     if (!coinOk(o)) return wait('本幣歷史虧損，跳過', `<p>這條${s}規則在此幣歷史上是虧的，跳過。</p>`);
-    if (r.beClosed) return { pri: 2, k: 'wait', label: '保本出場', one: `今天跌到成本價，約 ${price(r.beClosed.exit)} 出場`,
-      text: `<p class="alert"><b>依你的保本設定：</b>這筆曾賺到門檻，今天盤中跌到成本價，保本出場（成交約 ${price(r.beClosed.exit)}；開盤就跳空在成本價以下時會比成本低一些）。規則本身可能還沒出場。之後 60 個交易日內收盤再創前一段的新高，就會提示重新進場。</p>` };
+    if (r.beClosed) return { pri: 2, k: 'wait', label: '保本出場', one: `今天收在保本線以下（${price(r.beClosed.exit)}）`,
+      text: `<p class="alert"><b>依你的保本設定：</b>這筆曾賺到門檻，今天盤中跌到保本線（成本價含交易成本），收盤 ${price(r.beClosed.exit)} 仍在線下。照你的定義，12:30 若也在線下就該賣出；如果 12:30 時還在線上，可以等明天再看。網頁收盤後才更新，看不到 12:30 的價格，所以用收盤判斷（近 60 天和 12:30 判斷一致約 76%）。之後 60 個交易日內收盤再創前一段的新高，就會提示重新進場。</p>` };
     if (r.re) return { pri: 1, k: 'wait', label: '等重新進場', one: `收盤超過 ${price(r.re.top)} 再買`,
       text: `<p>依你的保本設定，這檔之前已保本出場。接下來 ${r.re.left} 個交易日內，收盤超過前一段的最高收盤 ${price(r.re.top)}，就重新進場（研究十九）；原本的進場訊號也照樣有效。</p>` };
     if (r.state === 'wait') return wait('尚無訊號', `<p>尚未出現${s}訊號。訊號只在 K 線收盤後變動。</p>`);

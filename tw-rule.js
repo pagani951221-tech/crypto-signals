@@ -38,7 +38,7 @@ function prep(b) {
 // 漲跌停 ±10%，價位跳動單位會讓實際漲停約 9.5～10%，用 9.5% 判斷
 const LIM = 0.095;
 function run(b, rev, opt = {}) {
-  const { hold = HOLD, sl = SL, ma: maN = 50, trail = 0, fill, skip, exitIf, be, reenter } = opt; // reenter：保本出場後 60 個交易日內 'high'＝收盤再創前一筆持有期間新高、'ma'＝收盤站回 20 日均線且 20 日線在 50 日線上，就重新進場（研究十九） // be：最高收盤曾賺到這個比例後，止損拉到成本價（含成本），研究十八 // skip(i)：第 i 根（進場日）不買；exitIf(i, p)：第 i 根收盤額外出場（研究十七）
+  const { hold = HOLD, sl = SL, ma: maN = 50, trail = 0, fill, skip, exitIf, be, beAt = 'touch', reenter } = opt; // beAt：'touch'＝盤中碰到成本價就出場（研究十八、十九），'close'＝碰到且收盤仍在成本價以下才以收盤出場（研究二十，近似「收盤前一小時仍在線下」） // reenter：保本出場後 60 個交易日內 'high'＝收盤再創前一筆持有期間新高、'ma'＝收盤站回 20 日均線且 20 日線在 50 日線上，就重新進場（研究十九） // be：最高收盤曾賺到這個比例後，止損拉到成本價（含成本），研究十八 // skip(i)：第 i 根（進場日）不買；exitIf(i, p)：第 i 根收盤額外出場（研究十七）
   const lockUp = i => b[i].l >= b[i - 1].c * (1 + LIM), lockDown = i => b[i].h <= b[i - 1].c * (1 - LIM);
   const lock = { in: 0, inMissed: 0, out: 0 };
   const x = prep(b), trades = [], last = b.length - 1;
@@ -49,10 +49,14 @@ function run(b, rev, opt = {}) {
     if (p && i >= p.in) {
       const hs = b[i].l <= p.stop, time = i - p.in + 1 >= hold;
       p.top = Math.max(p.top, x.c[i]);
-      if (be && p.top >= p.px * (1 + be) && p.stop < p.px * (1 + TW_COST)) { p.stop = p.px * (1 + TW_COST); p.beOn = true; } // 從隔天起生效
+      const beHit = p.beOn && beAt === 'close' && b[i].l <= p.bePx && x.c[i] <= p.bePx;
+      if (be && !p.beOn && p.top >= p.px * (1 + be) && p.stop < p.px * (1 + TW_COST)) { // 從隔天起生效
+        p.beOn = true; p.bePx = p.px * (1 + TW_COST);
+        if (beAt === 'touch') p.stop = p.bePx;
+      }
       const weak = !!(exitIf && exitIf(i, p, x));
       const ma = (maLine && x.c[i] < maLine[i]) || (trail > 0 && x.c[i] < p.top - trail * x.atr[i]) || weak;
-      const out = hs ? Math.min(b[i].o, p.stop) : ma || time ? b[i].c : null;
+      const out = hs ? Math.min(b[i].o, p.stop) : ma || time || beHit ? b[i].c : null;
       if (out !== null && fill && (lockDown(i) || (!hs && b[i].c <= b[i - 1].c * (1 - LIM)))) {
         lock.out++;
         let k = i + 1; while (k <= last && lockDown(k)) k++;
@@ -62,8 +66,8 @@ function run(b, rev, opt = {}) {
         p = null; i = k;
       } else if (out !== null) {
         trades.push({ in: p.in, out: i, t: b[p.in].t, T: b[i].t + 864e5, ret: out / p.px - 1 - TW_COST,
-          why: hs ? (p.beOn ? 'be' : 'stop') : weak && !(maLine && x.c[i] < maLine[i]) ? 'weak' : ma ? 'ma' : 'time', px: p.px, stop: p.stop, target: null, exit: out, re: !!p.re });
-        re = reenter && hs && p.beOn ? { top: p.top, until: i + 60, out: i } : null;
+          why: hs ? (p.beOn && beAt === 'touch' ? 'be' : 'stop') : beHit && !ma ? 'be' : weak && !(maLine && x.c[i] < maLine[i]) ? 'weak' : ma ? 'ma' : 'time', px: p.px, stop: p.stop, target: null, exit: out, re: !!p.re });
+        re = reenter && p.beOn && (beAt === 'touch' ? hs : beHit && !hs) ? { top: p.top, until: i + 60, out: i } : null;
         p = null;
       }
     }
