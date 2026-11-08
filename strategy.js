@@ -10,7 +10,8 @@ const COST = 2 * (FEE + SLIP);
 const FUND = 0.0001;
 const H8 = 288e5;     // 8 小時（毫秒），資金費率結算週期
 const WARMUP = 200;   // 200 均線需要的暖機根數
-const MAX_HOLD = 20;  // 止損止盈都沒碰到時，最多持有幾根 K 線
+const MAX_HOLD = 30;  // 止損止盈都沒碰到時，最多持有幾根 K 線（研究二十三）
+const OLD_HOLD = 20, HOLD_FROM = Date.UTC(2026, 10, 9); // 改成 30 根之前已經滿 20 根到期的交易維持原樣，不會變回持有中
 const MAX_STOP = 0.2; // 做多的止損距離上限（研究二十二）
 const MAX_STOP_FROM = Date.UTC(2026, 10, 7); // 上限開始生效的日期
 const MAX_K = 3;      // research 腳本最多組合幾個條件
@@ -127,6 +128,7 @@ const NO_FUNDING = fundingFn([]);
 function backtest(b, x, cand, ex, fund = NO_FUNDING) {
   const trades = [], last = b.length - 1, d = cand.dir, barMs = b[1].t - b[0].t;
   const open = (i, px) => ({ in: i + 1, px, stop: px - d * ex.sl * x.atr[i], target: px + d * ex.tp * x.atr[i] });
+  const limit = p => { const t = p.in < b.length ? b[p.in].t : Infinity; return cand.oldHold && t + OLD_HOLD * barMs <= HOLD_FROM && t >= HOLD_FROM - 90 * barMs ? OLD_HOLD : MAX_HOLD; };
   let p = null, state = 'wait';
   for (let i = WARMUP; i <= last; i++) {
     if (p) {
@@ -135,7 +137,7 @@ function backtest(b, x, cand, ex, fund = NO_FUNDING) {
       // 同一根同時碰到兩邊時當作先止損（保守）；跳空開在止損外就用開盤價成交
       const out = hitStop ? (d > 0 ? Math.min(b[i].o, p.stop) : Math.max(b[i].o, p.stop))
         : hitTarget ? p.target
-        : i - p.in + 1 >= MAX_HOLD ? b[i].c : null;
+        : i - p.in + 1 >= limit(p) ? b[i].c : null;
       if (out !== null) {
         const f = d < 0 ? fund(b[p.in].t, b[i].t + barMs) : 0;
         trades.push({ in: p.in, out: i, t: b[p.in].t, T: b[i].t + barMs, ret: d * (out / p.px - 1) - COST + f,
@@ -176,6 +178,7 @@ function runRule(bars, dir, fund, ex = RULE.ex, maxStop = MAX_STOP) {
   // 做多：止損距離超過上限的不做（波動太大的幣虧損太深）。上限生效前已發出、可能還持有的訊號照舊，才不會突然沒有出場通知
   const barMs = bars[1].t - bars[0].t, tooFar = i => ex.sl * x.atr[i] / x.c[i] > maxStop;
   const raw = cand.sig;
+  cand.oldHold = maxStop === MAX_STOP;
   if (dir > 0) cand.sig = cand.sig.map((v, i) => v && (!tooFar(i) || (bars[i].t < MAX_STOP_FROM && bars[i].t >= MAX_STOP_FROM - MAX_HOLD * barMs)));
   const r = backtest(bars, x, cand, ex, fund);
   // 上限生效當天已發出、後來被上限擋掉的訊號（只給歷史紀錄用，不算進驗證）
@@ -374,8 +377,8 @@ if (typeof module !== 'undefined') {
     const on = [[1, 1, 0, 1], [0, 1, 1, 1]];
     assert.deepStrictEqual(makeCand(on, [0, 1], 1).sig, [false, true, false, true]); // 只在「剛同時成立」那根出訊號
     // 日線、平盤 100、ATR 固定 1、止損 2／止盈 2；第 200 根出訊號 → 第 201 根開盤 100 進場
-    const flat = () => Array.from({ length: 230 }, (_, i) => ({ t: i * 864e5, o: 100, h: 100.5, l: 99.5, c: 100 }));
-    const x = { atr: Array(230).fill(1) }, ex = { sl: 2, tp: 2 };
+    const flat = () => Array.from({ length: 240 }, (_, i) => ({ t: i * 864e5, o: 100, h: 100.5, l: 99.5, c: 100 }));
+    const x = { atr: Array(240).fill(1) }, ex = { sl: 2, tp: 2 };
     const run = (b, dir, at = 200) => backtest(b, x, { dir, sig: b.map((_, i) => i === at) }, ex);
     const fund3d = FUND * 9; // 放空持有 3 天 = 9 次資金費率
     let b = flat(); b[203].h = 103;                       // 做多碰到止盈 102
@@ -388,11 +391,11 @@ if (typeof module !== 'undefined') {
     near(run(b, -1).trades[0].ret, 0.02 - COST - fund3d);
     b = flat(); b[203].h = 103;                           // 放空碰到止損 102
     near(run(b, -1).trades[0].ret, -0.02 - COST - fund3d);
-    r = run(flat(), 1); assert.strictEqual(r.trades[0].out, 220); near(r.trades[0].ret, -COST); // 滿 20 根出場
+    r = run(flat(), 1); assert.strictEqual(r.trades[0].out, 200 + MAX_HOLD); near(r.trades[0].ret, -COST); // 滿 MAX_HOLD 根出場
     assert.strictEqual(r.trades[0].why, 'time');
     b = flat(); b[203].h = 103; assert.strictEqual(run(b, 1).trades[0].why, 'target');
     b = flat(); b[203].l = 97; assert.strictEqual(run(b, 1).trades[0].why, 'stop');
-    r = run(flat(), 1, 229); assert.deepStrictEqual([r.state, r.pos.stop, r.pos.target], ['enter', 98, 102]);
+    r = run(flat(), 1, 239); assert.deepStrictEqual([r.state, r.pos.stop, r.pos.target], ['enter', 98, 102]);
     r = run(flat(), -1, 225); assert.deepStrictEqual([r.state, r.pos.stop, r.pos.target], ['hold', 102, 98]);
     const s = stats([{ ret: 0.1 }, { ret: 0.1 }, { ret: -0.05 }]);
     near(s.payoff, 2); near(s.be, 1 / 3); near(s.win, 2 / 3);

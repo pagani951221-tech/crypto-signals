@@ -259,7 +259,7 @@
   <section class="about">
     <div>
       <h2>這個預報怎麼來的</h2>
-      <p>只用一條經過研究挑出的規則：站上 200 均線 ＋ MACD 在訊號線上 ＋ 突破前 20 根高點時做多，但止損距離超過 20% 的幣不做（波動太大，虧損會太深）；止損 3 ATR（最近 14 根 K 線的平均波動），止盈＝止損 × 你設定的盈虧比（預設 2 倍，最低 1.5 倍），20 根 K 線內都沒碰到就出場。放空版（三個條件反過來）一起測，當作對照。個別幣自己歷史上虧錢的也跳過。</p>
+      <p>只用一條經過研究挑出的規則：站上 200 均線 ＋ MACD 在訊號線上 ＋ 突破前 20 根高點時做多，但止損距離超過 20% 的幣不做（波動太大，虧損會太深）；止損 3 ATR（最近 14 根 K 線的平均波動），止盈＝止損 × 你設定的盈虧比（預設 2 倍，最低 1.5 倍），30 根 K 線內都沒碰到就出場。放空版（三個條件反過來）一起測，當作對照。個別幣自己歷史上虧錢的也跳過。</p>
       <p style="margin-top:8px">成本含單邊手續費 0.1%、滑價 0.05%，放空另以每 8 小時扣 0.01% 估計資金費率（出現放空訊號時，才抓該幣的真實資金費率確認有沒有合約）。歷史行情一律用 Binance 的資料。因為有到期出場和交易成本，實際盈虧比會比設定值低一些。</p>
     </div>
     <div>
@@ -276,7 +276,7 @@
 
 <script src="https://unpkg.com/lightweight-charts@4.2.0/dist/lightweight-charts.standalone.production.js"></script>
 <!-- 改 strategy.js 時把 v 加 1，瀏覽器才會抓新版而不是用快取 -->
-<script src="strategy.js?v=19"></script>
+<script src="strategy.js?v=20"></script>
 <script>
   const $ = id => document.getElementById(id);
   const pct = v => (v >= 0 ? '+' : '−') + Math.abs(v * 100).toFixed(1) + '%';
