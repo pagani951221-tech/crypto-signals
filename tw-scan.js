@@ -7,7 +7,8 @@ const R = require('./tw-rule.js');
 const { send } = require('./telegram.js');
 const { TW_COST, universeAll, bars, revenue, flows, addWeekdays } = require('./tw-data.js');
 
-const REV = '.state/tw-rev.json'; // 月營收歷史，由 Actions 快取保存，每天只補抓缺的月份
+const REV = '.state/tw-rev.json';
+const LOG = 'tw-log.json'; // 上線後真實發出的訊號，只新增不改寫（規則以後改了，舊紀錄也不會被重算） // 月營收歷史，由 Actions 快取保存，每天只補抓缺的月份
 
 const PAGE = 'https://pagani951221-tech.github.io/crypto-signals/';
 const pct = v => (v >= 0 ? '+' : '−') + Math.abs(v * 100).toFixed(1) + '%';
@@ -114,6 +115,36 @@ async function loadRevenue() {
     stocks,
   }) + '\n');
   const live = stocks.filter(s => s.pos && S.coinOk(s.own) && !s.illiquid && val.pass);
+
+  // 真實紀錄：訊號日記下參考價，下一個交易日補上實際開盤價，規則出場時記下出場價。用實際價格（不含之後的股息）
+  let log; try { log = JSON.parse(fs.readFileSync(LOG)); } catch { log = { start: ymd(lastT), open: [], closed: [] }; }
+  const byCode = Object.fromEntries(data.map(d => [d.code, d]));
+  const real = (b, i, v) => price(v * b[i].raw / b[i].c);
+  for (const o of [...log.open]) {
+    const d = byCode[o.code], b = d?.b, iS = b ? b.findIndex(x => ymd(x.t) === o.sig) : -1;
+    if (iS < 0) continue;
+    if (o.px == null && iS + 1 < b.length) { o.inDate = ymd(b[iS + 1].t); o.px = real(b, iS + 1, b[iS + 1].o); }
+    if (o.px == null) continue;
+    const t = d.r.trades.find(t => t.in === iS + 1);
+    const done = t ? { outDate: ymd(b[t.out].t), exit: real(b, t.out, t.exit), why: t.why }
+      : d.r.pos && d.r.pos.in === iS + 1 ? null : { outDate: ymd(b.at(-1).t), exit: price(b.at(-1).raw), why: 'other' }; // 規則改了或資料修正，用最新收盤結算
+    if (!done) continue;
+    log.open.splice(log.open.indexOf(o), 1);
+    log.closed.push({ ...o, ...done, ret: +(done.exit / o.px - 1 - TW_COST).toFixed(4) });
+  }
+  for (const s of live.filter(s => s.state === 'enter')) {
+    const sig = ymd(s.lastT);
+    if (!log.open.some(o => o.code === s.code && o.sig === sig)) log.open.push({ code: s.code, name: s.name, mkt: s.mkt, sig, ref: s.close, stop: s.pos.stop });
+  }
+  fs.writeFileSync(LOG, JSON.stringify(log, null, 1) + '\n');
+  const cl = log.closed;
+  const liveRec = { start: log.start, n: cl.length, win: cl.length ? cl.filter(t => t.ret > 0).length / cl.length : 0,
+    avg: cl.length ? cl.reduce((a, t) => a + t.ret, 0) / cl.length : 0,
+    open: log.open.map(o => ({ ...o, now: byCode[o.code] ? price(byCode[o.code].b.at(-1).raw) : null })), closed: cl.slice(-50).reverse() };
+  const twj = JSON.parse(fs.readFileSync('tw.json'));
+  twj.live = liveRec;
+  fs.writeFileSync('tw.json', JSON.stringify(twj) + '\n');
+  console.log(`真實紀錄（${log.start} 起）：已出場 ${cl.length} 筆、持有中 ${log.open.length} 筆`);
   const f2 = v => (v * 100).toFixed(2) + '%';
   console.log(`驗證：全部 ${val.total.n} 筆 平均 ${f2(val.total.avg)} t ${val.total.t.toFixed(1)}｜滾動 ${val.wf.n} 筆 平均 ${f2(val.wf.avg)} t ${val.wf.t.toFixed(1)}｜近 12 月 ${f2(val.recent.avg)}`);
   console.log('逐年：' + val.rows.map(r => `${r.y}${r.on ? '' : '(不允許)'} ${f2(r.st.avg)}/${r.st.n}`).join('  '));
@@ -131,7 +162,7 @@ async function loadRevenue() {
     time: s => `持有滿 ${R.HOLD} 個交易日，規則以今天收盤 ${s.closed.exit} 出場。` };
   const blocks = [
     ...entries.map(s => [`${name(s)}　做多`,
-      `參考進場 ${s.pos.px}（今天收盤），明天開盤附近買進`,
+      `參考進場 ${s.pos.px}（今天收盤），明天開盤附近買進；若一字漲停整天買不到就放棄這筆`,
       `止損 ${s.pos.stop}（${pct(s.pos.stop / s.pos.px - 1)}），盤中碰到就出場`,
       `沒有固定止盈：收盤跌破 50 日均線（目前 ${s.pos.ma}）就出場`,
       `營收：${s.rev ? `${s.rev[0]} 月營收年增 ${s.rev[1] == null ? '—' : pct(s.rev[1] / 100)}，創 12 個月新高` : '—'}`,

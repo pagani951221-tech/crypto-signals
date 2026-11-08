@@ -249,6 +249,7 @@
     <p>每次打開都把掃描到的所有幣合併，重新做逐年滾動驗證：每年 1 月 1 日只看當時已經結束的交易，合併結果明顯賺錢（至少 50 筆、t 值 ≥ 2）才允許那一年交易；允許年份的成績也要賺錢（t 值 ≥ 1），而且到現在仍然允許，才會給出訊號。</p>
     <p class="exit" id="exit"></p>
     <div id="val"></div>
+    <div id="liverec"></div>
     <div id="ytd"></div>
   </section>
 
@@ -344,7 +345,7 @@
     if (r.state === 'wait') return wait('尚無訊號', `<p>尚未出現${s}訊號。訊號只在 K 線收盤後變動。</p>`);
     const f = freshness(p, d, live);
     if (r.state === 'enter') {
-      const head = (p.target == null ? `<p>今天收盤出現${s}訊號，下一個交易日開盤附近買進。盤中碰到止損就出場；沒有固定止盈，收盤跌破 50 日均線、或持有滿 ${twRule.hold} 個交易日就出場。</p>`
+      const head = (p.target == null ? `<p>今天收盤出現${s}訊號，下一個交易日開盤附近買進（若一字漲停整天買不到就放棄這筆）。盤中碰到止損就出場；沒有固定止盈，收盤跌破 50 日均線、或持有滿 ${twRule.hold} 個交易日就出場。</p>`
         : `<p>最新 K 線收盤出現${s}訊號${isTW() ? '，下一個交易日開盤附近買進' : ''}，${MAX_HOLD} 根 K 線內兩邊都沒碰到就市價出場。</p>`) + `${levels(p)}${holdText(d, bars, p)}`;
       if (f !== 'ok') return { pri: 1, k: 'wait', label: '觀望', one: '訊號已過時，不追', text: `${head}<p class="alert">即時價 ${price(live)} ${FRESH[f]}，不建議進場。</p>` };
       const exitTxt = p.target == null ? `跌破 ${price(p.ma)} 出場` : `止盈 ${price(p.target)}`;
@@ -604,6 +605,7 @@ ${exitTxt}`, text: head + sizeText(live, p, d, r),
     val = { 1: j.val, [-1]: { pass: false, rows: [], wf: { n: 0 }, recent: { n: 0 }, total: { n: 0 }, avgR: 0 } };
     chartKey = null;
     renderVal();
+    renderLive(j.live);
     renderYtd(j.ytd);
     const alerts = render();
     $('go').disabled = false;
@@ -646,6 +648,20 @@ ${exitTxt}`, text: head + sizeText(live, p, d, r),
       <div class="scroll"><table><tr><th>股票</th><th>今年漲跌</th><th>規則今年已出場</th><th>規則持有中</th></tr>${y.top.map(row).join('')}</table></div></details>`;
   }
 
+  // 上線後真實發出的訊號（tw-log.json），和回測分開看
+  function renderLive(L) {
+    if (!L) { $('liverec').innerHTML = ''; return; }
+    const WHY = { stop: '碰到止損', ma: '跌破 50 日均線', time: '持有滿期', other: '規則或資料變動，以收盤結算' };
+    const md = d => d ? d.slice(5).replace('-', '/') : '—';
+    const open = L.open.map(o => `<tr><td>${esc(o.name)}（${o.code}）</td><td>${md(o.sig)}</td><td>${o.px == null ? '下一個交易日開盤' : `${md(o.inDate)} ${o.px}`}</td><td>${o.now ?? '—'}</td><td>${o.px == null || o.now == null ? '—' : pct(o.now / o.px - 1)}</td></tr>`).join('');
+    const closed = L.closed.map(t => `<tr><td>${esc(t.name)}（${t.code}）</td><td>${md(t.inDate)} ${t.px}</td><td>${md(t.outDate)} ${t.exit}</td><td>${WHY[t.why] ?? t.why}</td><td>${pct(t.ret)}</td></tr>`).join('');
+    const sum = L.n ? `已出場 ${L.n} 筆，平均每筆 ${pct(L.avg)}、勝率 ${pct0(L.win)}` : '還沒有出場的交易';
+    $('liverec').innerHTML = `<details class="years"><summary>上線以來的真實紀錄（${L.start.replace(/-/g, '/')} 起）：${sum}；持有中 ${L.open.length} 筆</summary>
+      <p class="meta">每天發出的訊號原樣記下來，之後規則就算修改也不會回頭重算，所以這才是沒有事後調整的成績。進場價是訊號隔天的實際開盤價，出場價依規則；已扣成本，不含持有期間的股息。${L.n < 30 ? '<b>筆數還太少，勝率約三成的規則至少要累積幾十筆才看得出結果，現在的數字主要看運氣。</b>' : ''}</p>
+      ${L.open.length ? `<h4>持有中</h4><div class="scroll"><table><tr><th>股票</th><th>訊號日</th><th>實際進場</th><th>現價</th><th>漲跌</th></tr>${open}</table></div>` : ''}
+      ${L.closed.length ? `<h4>已出場（最近 50 筆）</h4><div class="scroll"><table><tr><th>股票</th><th>進場</th><th>出場</th><th>原因</th><th>報酬</th></tr>${closed}</table></div>` : ''}</details>`;
+  }
+
   // 依市場切換畫面：台股隱藏加密貨幣專用的設定
   function applyMarket() {
     const tw = isTW();
@@ -665,6 +681,7 @@ ${exitTxt}`, text: head + sizeText(live, p, d, r),
     savePrefs();
     $('go').disabled = true;
     $('twnote').hidden = true;
+    renderLive(null);
     renderYtd(null);
     $('status').textContent = '讀取成交量排行…';
     const EX = $('ex').value;

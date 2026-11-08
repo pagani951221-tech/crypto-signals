@@ -42,11 +42,12 @@ jobs:
         with:
           path: .state/tw-rev.json
           key: twrev-${{ github.run_id }}
-      - name: 提交 tw.json
+      - name: 提交 tw.json 與真實紀錄
         run: |
-          git diff --quiet tw.json && exit 0
+          git add tw.json tw-log.json
+          git diff --cached --quiet && exit 0
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git commit -am "Update Taiwan stock data"
+          git commit -m "Update Taiwan stock data"
           git pull --rebase
           git push
