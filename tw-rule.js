@@ -51,7 +51,7 @@ function run(b, rev, opt = {}) {
       p.top = Math.max(p.top, x.c[i]);
       const beHit = p.beOn && beAt === 'close' && b[i].l <= p.bePx && x.c[i] <= p.bePx;
       if (be && !p.beOn && p.top >= p.px * (1 + be) && p.stop < p.px * (1 + TW_COST)) { // 從隔天起生效
-        p.beOn = true; p.bePx = p.px * (1 + TW_COST);
+        p.beOn = true; p.bePx = p.px * (1 + TW_COST); p.beLv = be;
         if (beAt === 'touch') p.stop = p.bePx;
       }
       const weak = !!(exitIf && exitIf(i, p, x));

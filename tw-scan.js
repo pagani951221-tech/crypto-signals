@@ -98,6 +98,8 @@ async function loadRevenue() {
       const q = { px: price(p.px), stop: price(p.stop), target: null, ma: price(ma50.at(-1)), t: entryT,
         held: p.in < b.length ? b.length - p.in : null, deadline: addWeekdays(entryT, R.HOLD - 1) + CLOSE };
       if (p.beOn) { q.beOn = true; q.bePx = price(p.bePx); }
+      // 保本線今天才啟動：今天以前的最高收盤還沒到門檻、今天到了（Telegram 提醒用）
+      if (p.beOn && p.in < b.length - 1 && Math.max(...b.slice(p.in, -1).map(x => x.c)) < p.px * (1 + p.beLv)) q.beToday = true;
       if (p.re) q.re = true;
       if (p.in < b.length) { // 轉弱檢查（只給人參考）：收在 20 日均線下、離持有期間最高收盤多遠、近 20 天比大盤強弱
         const cs = b.map(x => x.c), top = Math.max(...cs.slice(p.in));
@@ -109,7 +111,7 @@ async function loadRevenue() {
     // 網頁「保本出場」設定的各級版本（研究十八～二十）：曾賺到門檻後，盤中碰到成本價且收盤仍在成本以下就出場（近似「收盤前一小時仍在線下」）；保本出場後 60 天內再創新高就重新進場
     for (const lv of [0.1, 0.15, 0.2, 0.3]) {
       const v = R.run(b, rev[d.code] || {}, { be: lv, beAt: 'close', reenter: 'high' }), lt = v.trades.at(-1);
-      const closed = lt && lt.out === b.length - 1 && lt.why === 'be' ? { exit: price(lt.exit) } : null;
+      const closed = lt && lt.out === b.length - 1 ? { why: lt.why, px: price(lt.px), exit: price(lt.exit), stop: price(lt.stop), t: b[lt.in].t } : null;
       if (!v.pos && !v.re && !closed) continue;
       (o.be ||= {})[lv] = { state: v.state, ...(v.pos ? { pos: posOf(v.pos) } : {}), ...(v.re ? { re: { top: price(v.re.top), left: v.re.until - (b.length - 1) } } : {}), ...(closed ? { closed } : {}) };
     }
@@ -192,12 +194,26 @@ async function loadRevenue() {
   const test = process.env.TEST === 'true';
   if (!val.pass || (!fresh && !test)) return;
   const name = s => `${s.name}（${s.code}）`;
-  const entries = live.filter(s => s.state === 'enter');
-  const exits = stocks.filter(s => s.closed && S.coinOk(s.own) && !s.illiquid);
+  // Telegram 用的保本設定（Actions 變數 TW_BE，例如 0.1＝曾賺 10%）：有設定時，進出場改照保本版本（含保本出場、再創新高重新進場）
+  const BE = process.env.TW_BE ? +process.env.TW_BE : 0;
+  const ok = s => S.coinOk(s.own) && !s.illiquid;
+  const view = BE ? stocks.map(s => { const v = s.be?.[BE]; return { ...s, state: v?.state ?? 'wait', pos: v?.pos ?? null, closed: v?.closed ?? null }; }) : stocks;
+  const entries = view.filter(s => s.state === 'enter' && s.pos && ok(s) && val.pass);
+  // 開始用保本設定的那天記在 tw-log.json；只通知你收到過進場訊息的部位（和原規則同一筆，或開始後才進場的）
+  if (BE && log.beSince == null) { log.beSince = ymd(lastT); log.beSwitch = true; }
+  if (!BE) delete log.beSince;
+  fs.writeFileSync(LOG, JSON.stringify(log, null, 1) + '\n');
+  const main = code => stocks.find(x => x.code === code);
+  const known = s => !BE || s.closed.px === main(s.code)?.pos?.px || s.closed.px === main(s.code)?.closed?.px || ymd(s.closed.t) >= log.beSince;
+  const exits = view.filter(s => s.closed && ok(s) && known(s));
+  const armed = BE ? view.filter(s => s.pos?.beToday && ok(s)) : [];
+  // 第一次改用保本設定：原規則還持有、但照保本設定早已出場的，提醒一次
+  const gone = BE && log.beSwitch ? stocks.filter(s => s.pos && s.state === 'hold' && ok(s) && !view.find(v => v.code === s.code)?.pos) : [];
   const WHY = { stop: s => `今天碰到止損 ${s.closed.stop}，照規則出場。`, ma: s => `今天收盤 ${s.closed.exit} 跌破 50 日均線，照規則出場。`,
-    time: s => `持有滿 ${R.HOLD} 個交易日，規則以今天收盤 ${s.closed.exit} 出場。` };
+    time: s => `持有滿 ${R.HOLD} 個交易日，規則以今天收盤 ${s.closed.exit} 出場。`,
+    be: s => `今天盤中跌到保本線，收盤 ${s.closed.exit} 仍在線下：照你的保本設定出場（12:30 時若已在線下應已賣出；若當時還在線上，可以等明天再看）。之後 60 個交易日內收盤再創前一段新高，會再通知重新進場。` };
   const blocks = [
-    ...entries.map(s => [`${name(s)}　做多`,
+    ...entries.map(s => [`${name(s)}　做多${s.pos.re ? '（保本出場後再創新高，重新進場）' : ''}`,
       `參考進場 ${s.pos.px}（今天收盤），明天開盤附近買進；若一字漲停整天買不到就放棄這筆`,
       `止損 ${s.pos.stop}（${pct(s.pos.stop / s.pos.px - 1)}），盤中碰到就出場`,
       `沒有固定止盈：收盤跌破 50 日均線（目前 ${s.pos.ma}）就出場`,
@@ -208,10 +224,14 @@ async function loadRevenue() {
       `預計持有：通常 ${hold.med} 個交易日，最晚約 ${day(s.pos.deadline)} 收盤出場`,
       `本股歷史 ${s.own.n} 筆，勝率 ${(s.own.win * 100).toFixed(0)}%，平均每筆 ${pct(s.own.avg)}`].join('\n')),
     ...exits.map(s => `${name(s)}　做多部位（進場 ${s.closed.px}）\n` + WHY[s.closed.why](s)),
+    ...(gone.length ? [`改用保本設定（曾賺 ${BE * 100}%）：以下持股照原規則還在持有，但照保本設定之前已經跌回成本出場，請自己決定要不要賣：\n` + gone.map(s => `${name(s)} 收盤 ${s.close}`).join('\n')] : []),
+    ...armed.map(s => `${name(s)}　保本線啟動\n持有期間已賺到 ${BE * 100}% 以上，保本線 ${s.pos.bePx}（成本含交易成本）。之後盤中跌到這裡，而且 12:30 仍在線下就賣。`),
   ];
   if (!blocks.length && !test) return;
-  const head = test ? `測試訊息：台股通知正常。\n今天新的進場訊號 ${entries.length} 檔、出場 ${exits.length} 檔。` : '台股（實驗性）收盤：今天要處理的事';
+  const head = (test ? `測試訊息：台股通知正常。\n今天新的進場訊號 ${entries.length} 檔、出場 ${exits.length} 檔。` : '台股（實驗性）收盤：今天要處理的事')
+    + (BE ? `\n（照你的保本設定：曾賺 ${BE * 100}% 後跌回成本就賣）` : '');
   const mkt = market ? `大盤：加權指數 ${market.c.toLocaleString()}，離 60 日高點 ${pct(market.off)}，${market.c < market.m50 ? '在 50 日均線之下（轉弱）' : '在 50 日均線之上'}；規則不因大盤出場，擔心可以自己減碼` : null;
   await send([head, ...(mkt ? [mkt] : []), ...blocks].join('\n\n')
     + `\n\n台股是實驗性質：勝率約三成，靠少數大賺的單撐起平均，連續停損很正常。\n頁面：${PAGE}\n歷史回測不保證未來獲利，這不是投資建議。`);
+  if (log.beSwitch) { delete log.beSwitch; fs.writeFileSync(LOG, JSON.stringify(log, null, 1) + '\n'); }
 })().catch(e => { console.error(e); process.exit(1); });

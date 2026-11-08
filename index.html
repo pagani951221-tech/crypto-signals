@@ -379,7 +379,7 @@ ${exitTxt}`, text: head + sizeText(live, p, d, r),
       lines: [{ text: `<p>近 20 天平均每天成交約 ${item.liq.toLocaleString()} 萬元，不到 1,000 萬元。成交量太小，價差與滑價會吃掉利潤，所以不給訊號。</p>` }] };
     // 台股開了保本設定：改用雲端照這個設定算好的部位（含保本出場與重新進場）
     const lv = isTW() ? +$('be').value : 0, bv = lv ? item.be?.[lv] : null;
-    const runs = lv ? item.runs.map(r => ({ ...r, state: bv?.state ?? 'wait', pos: bv?.pos ?? null, re: bv?.re, beClosed: bv?.closed })) : item.runs;
+    const runs = lv ? item.runs.map(r => ({ ...r, state: bv?.state ?? 'wait', pos: bv?.pos ?? null, re: bv?.re, beClosed: bv?.closed?.why === 'be' ? bv.closed : null })) : item.runs;
     const lines = runs.filter(r => val[r.dir].pass).map(r => lineFor(r, item));
     if (!lines.length) return { k: 'wait', label: '觀望', one: '規則未通過驗證', lines, pri: -1 };
     const top = lines.reduce((m, l) => l.pri > m.pri ? l : m);
