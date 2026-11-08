@@ -212,6 +212,7 @@
     <label class="num cr">週期<select id="tf"></select></label>
     <label class="num"><span id="capl">目前資金（USDT）</span><input id="cap" type="number" min="0" step="any" inputmode="decimal" placeholder="例如 1000"></label>
     <label class="num">每筆風險 %<input id="risk" type="number" min="0.1" max="10" step="0.1" value="1"></label>
+    <label class="scanl twonly" hidden>保本出場<select id="be"><option value="0">不使用</option><option value="0.1">曾賺 10% 後回到成本就賣</option><option value="0.15">曾賺 15% 後回到成本就賣</option><option value="0.2">曾賺 20% 後回到成本就賣</option><option value="0.3">曾賺 30% 後回到成本就賣</option></select></label>
     <label class="num cr">盈虧比（倍）<input id="rr" type="number" min="1.5" max="5" step="0.1" value="2"></label>
     <button id="go">更新</button>
     <label class="auto"><input id="auto" type="checkbox">每根 K 線收盤後自動更新，有新的進場訊號時跳出通知（頁面需保持開啟）</label>
@@ -331,11 +332,20 @@
       + `最長 ${MAX_HOLD} 根 K 線，最晚${isTW() ? '約' : ''} <b>${when(p.deadline ?? deadline(bars, p))}</b> 收盤出場。</p>`;
   };
 
-  const levels = p => `<dl class="levels">
+  // 保本出場（研究十八，只有台股、只在網頁）：持有期間最高收盤曾比進場價高出設定比例，之後收盤回到成本價（含交易成本）以下就建議出場
+  const beOf = (p, live) => {
+    const trig = +$('be').value;
+    if (!isTW() || !trig || !p.weak) return null;
+    const px = p.px * (1 + twCost), gain = live / (1 + p.weak.off) / p.px - 1;
+    return px <= p.stop ? null : { armed: gain >= trig, px, gain, need: p.px * (1 + trig) };
+  };
+  const levels = (p, live) => `<dl class="levels">
       <div><dt>進場</dt><dd>${price(p.px)}</dd></div>
       <div><dt>止損</dt><dd>${price(p.stop)}<small>${pct(p.stop / p.px - 1)}</small></dd></div>
       ${p.target == null ? `<div><dt>出場線（50 日均線）</dt><dd>${price(p.ma)}<small>收盤跌破就出場</small></dd></div>`
-        : `<div><dt>止盈</dt><dd>${price(p.target)}<small>${pct(p.target / p.px - 1)}</small></dd></div>`}</dl>`;
+        : `<div><dt>止盈</dt><dd>${price(p.target)}<small>${pct(p.target / p.px - 1)}</small></dd></div>`}
+      ${(b => !b ? '' : b.armed ? `<div><dt>保本線（你的設定）</dt><dd>${price(b.px)}<small>曾賺 ${pct(b.gain)}，收盤回到這裡以下就賣</small></dd></div>`
+        : `<div><dt>保本線（你的設定）</dt><dd>未啟動<small>收盤漲到 ${price(b.need)} 以上才啟動</small></dd></div>`)(live == null ? null : beOf(p, live))}</dl>`;
 
   // 一個方向的判斷：pri 越高越優先決定這個幣的標籤；one＝格子裡的一行字，text＝詳細面板內容
   function lineFor(r, item) {
@@ -360,7 +370,10 @@ ${exitTxt}`, text: head + sizeText(live, p, d, r),
       <li>離持有期間最高收盤 ${wk.off < -0.15 ? `<b>${pct(wk.off)}</b>` : pct(wk.off)}</li>
       ${wk.rs == null ? '' : `<li>近 20 天比大盤${wk.rs >= 0 ? '強' : '弱'} ${wk.rs < -0.1 ? `<b>${`${(Math.abs(wk.rs) * 100).toFixed(1)}%`}</b>` : `${(Math.abs(wk.rs) * 100).toFixed(1)}%`}</li>`}</ul>
       <p class="meta">研究十七回測過：跌破 20 日均線、從高點回落 15%、比大盤弱 10% 就提早出場，長期都比照規則（跌破 50 日均線才賣）賺得少。這幾項只是讓你知道目前狀況；想降低風險可以自己先賣一部分。</p>` : '';
-    const now = `<p>規則已在 ${when(p.t ?? bars[p.in].t)} ${s}，${isTW() ? '收盤價' : '即時價'} ${price(live)}（${pct(d * (live / p.px - 1))}）。</p>${levels(p)}${holdText(d, bars, p, held)}${weakTxt}`;
+    const now = `<p>規則已在 ${when(p.t ?? bars[p.in].t)} ${s}，${isTW() ? '收盤價' : '即時價'} ${price(live)}（${pct(d * (live / p.px - 1))}）。</p>${levels(p, live)}${holdText(d, bars, p, held)}${weakTxt}`;
+    const bk = beOf(p, live);
+    if (bk?.armed && live <= bk.px) return { pri: 2, k: 'wait', label: '保本出場', one: `回到成本 ${price(bk.px)}，依你的設定出場`,
+      text: `${now}<p class="alert"><b>依你的保本設定：</b>這筆持有期間曾賺 ${pct(bk.gain)}，收盤已回到成本價（含交易成本）${price(bk.px)} 以下，建議下一個交易日出場。規則本身還沒出場（止損 ${price(p.stop)}、50 日均線 ${price(p.ma)}）。</p>` };
     if (f === 'stop' || f === 'target') return { pri: 1, k: 'wait', label: '觀望', one: `已到${f === 'stop' ? '止損' : '止盈'}位`, text: `${now}<p class="alert">即時價已到${f === 'stop' ? '止損' : '止盈'}位，這筆應已出場，等下一次訊號。</p>` };
     return { pri: 2, k: 'hold', label: d > 0 ? '持有多單' : '持有空單', one: `${pct(d * (live / p.px - 1))}，已持有 ${dur(held)}${isTW() ? `（最多 ${twRule.hold}）` : ''}`, text: `${now}<p>已進場者照這組${p.target == null ? '止損與 50 日均線' : '止損止盈'}續抱；未進場者不追價，等下一次訊號。</p>` };
   }
@@ -594,7 +607,7 @@ ${exitTxt}`, text: head + sizeText(live, p, d, r),
   }
 
   function savePrefs() {
-    try { localStorage.setItem('prefs', JSON.stringify({ mkt: $('mkt').value, ex: $('ex').value, scan: $('scan').value, tf: $('tf').value, cap: $('cap').value, risk: $('risk').value, rr: $('rr').value, auto: $('auto').checked })); } catch {}
+    try { localStorage.setItem('prefs', JSON.stringify({ mkt: $('mkt').value, ex: $('ex').value, scan: $('scan').value, tf: $('tf').value, cap: $('cap').value, risk: $('risk').value, rr: $('rr').value, be: $('be').value, auto: $('auto').checked })); } catch {}
   }
 
   // 台股：讀雲端每天算好的 tw.json，轉成和加密貨幣相同的格式
@@ -680,6 +693,7 @@ ${exitTxt}`, text: head + sizeText(live, p, d, r),
   function applyMarket() {
     const tw = isTW();
     document.querySelectorAll('.cr').forEach(e => e.hidden = tw);
+    document.querySelectorAll('.twonly').forEach(e => e.hidden = !tw);
     $('twnote').hidden = !tw;
     $('capl').textContent = tw ? '目前資金（台幣）' : '目前資金（USDT）';
     $('pickl').textContent = tw ? '查看其他股票' : '查看其他幣';
@@ -781,6 +795,8 @@ ${exitTxt}`, text: head + sizeText(live, p, d, r),
   if (p.cap) $('cap').value = p.cap;
   if (p.risk) $('risk').value = p.risk;
   if (p.rr) $('rr').value = p.rr;
+  if (p.be) $('be').value = p.be;
+  $('be').onchange = () => { savePrefs(); render(); };
   $('auto').checked = !!p.auto && 'Notification' in window && Notification.permission === 'granted';
   $('f').onsubmit = e => { e.preventDefault(); run(); };
   $('tf').onchange = () => run();

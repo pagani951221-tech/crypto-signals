@@ -38,7 +38,7 @@ function prep(b) {
 // 漲跌停 ±10%，價位跳動單位會讓實際漲停約 9.5～10%，用 9.5% 判斷
 const LIM = 0.095;
 function run(b, rev, opt = {}) {
-  const { hold = HOLD, sl = SL, ma: maN = 50, trail = 0, fill, skip, exitIf } = opt; // skip(i)：第 i 根（進場日）不買；exitIf(i, p)：第 i 根收盤額外出場（研究十七）
+  const { hold = HOLD, sl = SL, ma: maN = 50, trail = 0, fill, skip, exitIf, be } = opt; // be：最高收盤曾賺到這個比例後，止損拉到成本價（含成本），研究十八 // skip(i)：第 i 根（進場日）不買；exitIf(i, p)：第 i 根收盤額外出場（研究十七）
   const lockUp = i => b[i].l >= b[i - 1].c * (1 + LIM), lockDown = i => b[i].h <= b[i - 1].c * (1 - LIM);
   const lock = { in: 0, inMissed: 0, out: 0 };
   const x = prep(b), trades = [], last = b.length - 1;
@@ -49,6 +49,7 @@ function run(b, rev, opt = {}) {
     if (p && i >= p.in) {
       const hs = b[i].l <= p.stop, time = i - p.in + 1 >= hold;
       p.top = Math.max(p.top, x.c[i]);
+      if (be && p.top >= p.px * (1 + be)) p.stop = Math.max(p.stop, p.px * (1 + TW_COST)); // 從隔天起生效
       const weak = !!(exitIf && exitIf(i, p, x));
       const ma = (maLine && x.c[i] < maLine[i]) || (trail > 0 && x.c[i] < p.top - trail * x.atr[i]) || weak;
       const out = hs ? Math.min(b[i].o, p.stop) : ma || time ? b[i].c : null;
