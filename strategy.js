@@ -175,9 +175,13 @@ function runRule(bars, dir, fund, ex = RULE.ex, maxStop = MAX_STOP) {
   const cand = makeCand(condOn(x, bars.length, dir), RULE.ids, dir);
   // 做多：止損距離超過上限的不做（波動太大的幣虧損太深）。上限生效前已發出、可能還持有的訊號照舊，才不會突然沒有出場通知
   const barMs = bars[1].t - bars[0].t, tooFar = i => ex.sl * x.atr[i] / x.c[i] > maxStop;
+  const raw = cand.sig;
   if (dir > 0) cand.sig = cand.sig.map((v, i) => v && (!tooFar(i) || (bars[i].t < MAX_STOP_FROM && bars[i].t >= MAX_STOP_FROM - MAX_HOLD * barMs)));
   const r = backtest(bars, x, cand, ex, fund);
-  return { dir, name: cand.name, ...r, own: stats(r.trades) };
+  // 上限生效當天已發出、後來被上限擋掉的訊號（只給歷史紀錄用，不算進驗證）
+  const at = dir > 0 && maxStop === MAX_STOP ? bars.findIndex((b, i) => raw[i] && !cand.sig[i] && b.t === MAX_STOP_FROM) : -1;
+  const legacy = at >= 0 ? backtest(bars, x, { ...cand, sig: raw.map((_, i) => i === at) }, ex, fund) : null;
+  return { dir, name: cand.name, ...r, own: stats(r.trades), legacy };
 }
 
 const yearOf = t => new Date(t).getUTCFullYear();

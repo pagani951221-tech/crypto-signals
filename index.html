@@ -251,6 +251,7 @@
     <p>每次打開都把掃描到的所有幣合併，重新做逐年滾動驗證：每年 1 月 1 日只看當時已經結束的交易，合併結果明顯賺錢（至少 50 筆、t 值 ≥ 2）才允許那一年交易；允許年份的成績也要賺錢（t 值 ≥ 1），而且到現在仍然允許，才會給出訊號。</p>
     <p class="exit" id="exit"></p>
     <div id="val"></div>
+    <div id="hist"></div>
     <div id="liverec"></div>
     <div id="ytd"></div>
   </section>
@@ -275,7 +276,7 @@
 
 <script src="https://unpkg.com/lightweight-charts@4.2.0/dist/lightweight-charts.standalone.production.js"></script>
 <!-- 改 strategy.js 時把 v 加 1，瀏覽器才會抓新版而不是用快取 -->
-<script src="strategy.js?v=18"></script>
+<script src="strategy.js?v=19"></script>
 <script>
   const $ = id => document.getElementById(id);
   const pct = v => (v >= 0 ? '+' : '−') + Math.abs(v * 100).toFixed(1) + '%';
@@ -635,6 +636,7 @@ ${exitTxt}`, text: head + sizeText(live, p, d, r),
     val = { 1: j.val, [-1]: { pass: false, rows: [], wf: { n: 0 }, recent: { n: 0 }, total: { n: 0 }, avgR: 0 } };
     chartKey = null;
     renderVal();
+    histToken++; $('hist').innerHTML = '';
     renderLive(j.live);
     renderYtd(j.ytd);
     const alerts = render();
@@ -676,6 +678,34 @@ ${exitTxt}`, text: head + sizeText(live, p, d, r),
       <p class="meta">這是回頭檢查規則用的，<b>不是選股建議</b>：已經大漲的股票不代表會繼續漲。${y.y} 年到目前 ${y.n} 檔裡有 ${y.dbl} 檔漲一倍以上，規則今年有進場其中 ${y.dblCaught} 檔。
       報酬是還原權息（含息），規則的報酬已扣成本；「合計」是今年每次進出場連乘，常常只賺到一段，因為跌破 50 日均線就會先賣。2018–2025 年驗證過：年初看站上均線、成交量大、營收成長來挑股票，並沒有比較容易挑到翻倍股。</p>
       <div class="scroll"><table><tr><th>股票</th><th>今年漲跌</th><th>規則今年已出場</th><th>規則持有中</th></tr>${y.top.map(row).join('')}</table></div></details>`;
+  }
+
+  // 加密貨幣：最近 90 天已結束的交易；還持有的部位，今天這根還沒收盤也先看有沒有碰到止損止盈
+  let histToken = 0;
+  async function renderHist() {
+    const token = ++histToken;
+    if (isTW() || $('tf').value !== '1d' || !val[1]?.pass) { $('hist').innerHTML = ''; return; }
+    const WHY = { stop: '打到止損', target: '打到止盈', time: `持有滿 ${MAX_HOLD} 根到期` }, from = Date.now() - 90 * 864e5, rows = [], open = [];
+    for (const it of items.filter(i => i.show && i.runs)) {
+      const r = it.runs[0], leg = r.legacy, ok = coinOk(r.own);
+      if (ok) for (const t of r.trades) if (t.T >= from) rows.push({ sym: it.sym, ...t });
+      if (ok && r.pos) open.push({ sym: it.sym, ...r.pos, t: r.pos.t ?? (r.pos.in < it.bars.length ? it.bars[r.pos.in].t : it.bars.at(-1).T + 1) });
+      if (leg) { for (const t of leg.trades) rows.push({ sym: it.sym, ...t }); if (leg.pos) open.push({ sym: it.sym, ...leg.pos, t: it.bars.at(-1).T + 1 }); }
+    }
+    await pool(open, 4, async p => {
+      const k = await fetch(`https://data-api.binance.vision/api/v3/klines?symbol=${p.sym}USDT&interval=1d&limit=1`).then(r => r.json()).catch(() => null);
+      if (!k?.[0]) return;
+      const o = +k[0][1], h = +k[0][2], l = +k[0][3];
+      const why = l <= p.stop ? 'stop' : h >= p.target ? 'target' : null;
+      if (why) { const exit = why === 'stop' ? Math.min(o, p.stop) : p.target; rows.push({ sym: p.sym, t: p.t, T: Date.now() + 864e5, px: p.px, exit, why, ret: exit / p.px - 1 - 0.003, today: true }); }
+    });
+    if (token !== histToken || isTW()) return;
+    rows.sort((a, b) => b.T - a.T);
+    const md = t => new Date(t).toLocaleDateString('zh-TW', { month: 'numeric', day: 'numeric' }), n = rows.length, win = rows.filter(r => r.ret > 0).length;
+    const avg = n ? rows.reduce((s, r) => s + r.ret, 0) / n : 0;
+    $('hist').innerHTML = `<details class="years" open><summary>歷史紀錄：最近 90 天已結束 ${n} 筆${n ? `，勝率 ${pct0(win / n)}、平均每筆 ${pct(avg)}` : ''}</summary>
+      <p class="meta">由規則算出（隔天開盤進場，已扣手續費與滑價），不是你實際的成交紀錄。標「今天」的是今天這根 K 線還沒收盤、但盤中已經碰到價位。11/7 當天的訊號在止損距離上限生效前發出，所以仍列在這裡。</p>
+      ${n ? `<div class="scroll"><table><tr><th>幣</th><th>進場</th><th>出場</th><th>原因</th><th>報酬</th></tr>${rows.slice(0, 50).map(r => `<tr><td>${esc(r.sym)}</td><td>${md(r.t)} ${price(r.px)}</td><td>${r.today ? '今天' : md(r.T - 864e5)} ${price(r.exit)}</td><td>${WHY[r.why]}</td><td>${pct(r.ret)}</td></tr>`).join('')}</table></div>` : ''}</details>`;
   }
 
   // 上線後真實發出的訊號（tw-log.json），和回測分開看
@@ -741,6 +771,7 @@ ${exitTxt}`, text: head + sizeText(live, p, d, r),
       alerts = compute();
     }
     $('go').disabled = false;
+    renderHist();
     // 只在自動更新時通知「這次才新出現」的訊號；第一次載入或手動更新不通知
     if (fromTimer && seen && 'Notification' in window && Notification.permission === 'granted')
       for (const n of alerts.filter(n => !seen.has(n.key))) new Notification(n.title, { body: n.body, tag: n.key });
