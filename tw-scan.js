@@ -100,7 +100,7 @@ async function loadRevenue() {
       if (p.beOn) { q.beOn = true; q.bePx = price(p.bePx); }
       // 保本線今天才啟動：今天以前的最高收盤還沒到門檻、今天到了（Telegram 提醒用）
       if (p.beOn && p.in < b.length - 1 && Math.max(...b.slice(p.in, -1).map(x => x.c)) < p.px * (1 + p.beLv)) q.beToday = true;
-      if (p.re) q.re = true;
+      if (p.re) { q.re = true; q.reTop = price(p.reTop); }
       if (p.in < b.length) { // 轉弱檢查（只給人參考）：收在 20 日均線下、離持有期間最高收盤多遠、近 20 天比大盤強弱
         const cs = b.map(x => x.c), top = Math.max(...cs.slice(p.in));
         q.weak = { below20: cs.at(-1) < avg(cs, 20), off: +(cs.at(-1) / top - 1).toFixed(4), rs: market ? +(cs.at(-1) / cs.at(-21) - 1 - market.r20).toFixed(4) : null };
@@ -114,6 +114,11 @@ async function loadRevenue() {
       const closed = lt && lt.out === b.length - 1 ? { why: lt.why, px: price(lt.px), exit: price(lt.exit), stop: price(lt.stop), t: b[lt.in].t } : null;
       if (!v.pos && !v.re && !closed) continue;
       (o.be ||= {})[lv] = { state: v.state, ...(v.pos ? { pos: posOf(v.pos) } : {}), ...(v.re ? { re: { top: price(v.re.top), left: v.re.until - (b.length - 1) } } : {}), ...(closed ? { closed } : {}) };
+    }
+    // 今天有進場訊號（原規則或任一保本版本）：附上進場與止損的理由
+    if (r.state === 'enter' || Object.values(o.be || {}).some(v => v.state === 'enter')) {
+      const L = b.length - 1, x = r.x;
+      o.why = { hi: price(x.hh250[L]), val: Math.round(b[L].val / 1e6), avg: Math.round(x.liq[L] / 1e6), x: +(b[L].val / x.liq[L]).toFixed(1), atr: +x.atr[L].toPrecision(3), sl: R.SL };
     }
     const t = r.trades.at(-1);
     if (t && t.out === b.length - 1) o.closed = { why: t.why, px: price(t.px), exit: price(t.exit), stop: price(t.stop) };
@@ -194,6 +199,17 @@ async function loadRevenue() {
   const test = process.env.TEST === 'true';
   if (!val.pass || (!fresh && !test)) return;
   const name = s => `${s.name}（${s.code}）`;
+  // 進場理由：為什麼是今天
+  const money = v => v >= 100 ? `${(v / 100).toFixed(1)} 億` : `${(v * 100).toLocaleString()} 萬`;
+  const whyLines = s => {
+    const w = s.why;
+    if (s.pos.re) return [`為什麼今天進場：之前照保本設定出場，今天收盤 ${s.close} 超過前一段最高收盤 ${s.pos.reTop}，代表又回到多頭`];
+    if (!w) return [];
+    return [`為什麼今天進場：`,
+      `・今天收盤 ${s.close} 創 52 週新高（前 52 週最高 ${w.hi}，還原權息價）`,
+      `・今天成交 ${money(w.val)}元，是近 20 天平均（${money(w.avg)}元）的 ${w.x} 倍，有大量資金買進`,
+      ...(s.rev ? [`・${s.rev[0]} 月營收創 12 個月新高（年增 ${s.rev[1] == null ? '—' : pct(s.rev[1] / 100)}），基本面也在變好`] : [])];
+  };
   // Telegram 用的保本設定（Actions 變數 TW_BE，例如 0.1＝曾賺 10%）：有設定時，進出場改照保本版本（含保本出場、再創新高重新進場）
   const BE = process.env.TW_BE ? +process.env.TW_BE : 0;
   const ok = s => S.coinOk(s.own) && !s.illiquid;
@@ -215,11 +231,12 @@ async function loadRevenue() {
   const blocks = [
     ...entries.map(s => [`${name(s)}　做多${s.pos.re ? '（保本出場後再創新高，重新進場）' : ''}`,
       `參考進場 ${s.pos.px}（今天收盤），明天開盤附近買進；若一字漲停整天買不到就放棄這筆`,
+      ...whyLines(s),
       `止損 ${s.pos.stop}（${pct(s.pos.stop / s.pos.px - 1)}），盤中碰到就出場`,
-      `沒有固定止盈：收盤跌破 50 日均線（目前 ${s.pos.ma}）就出場`,
+      `為什麼止損在這裡：進場價 − ${s.why?.sl ?? R.SL} 倍 ATR（近 14 天平均每天波動約 ${s.why?.atr ?? '—'} 元）。留 3 倍正常波動的空間，平常震盪不會洗掉你；真的跌到這裡，代表這次突破失敗`,
+      `沒有固定止盈：收盤跌破 50 日均線（目前 ${s.pos.ma}）就出場，讓大漲的股票可以一直抱`,
       ...(s.att && !s.disp ? [`注意股：最近 10 個交易日被注意 ${s.att[0]} 次（再累積可能變成處置股，改為分盤撮合、要先存錢）`] : []),
       ...(s.disp ? [`處置股（到 ${s.disp[1].slice(5).replace('-', '/')}）：約每 ${s.disp[2] ?? '幾'} 分鐘撮合一次，${s.disp[3] ? '每筆買進都要先把錢存進券商' : '單筆 10 張或當天累積 30 張以上要先把錢存進券商'}；成交價可能和開盤價差比較多`] : []),
-      `營收：${s.rev ? `${s.rev[0]} 月營收年增 ${s.rev[1] == null ? '—' : pct(s.rev[1] / 100)}，創 12 個月新高` : '—'}`,
       `新聞：https://tw.stock.yahoo.com/quote/${s.code}.${s.mkt}/news`,
       `預計持有：通常 ${hold.med} 個交易日，最晚約 ${day(s.pos.deadline)} 收盤出場`,
       `本股歷史 ${s.own.n} 筆，勝率 ${(s.own.win * 100).toFixed(0)}%，平均每筆 ${pct(s.own.avg)}`].join('\n')),

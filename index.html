@@ -353,7 +353,13 @@
     if (r.state === 'wait') return wait('尚無訊號', `<p>尚未出現${s}訊號。訊號只在 K 線收盤後變動。</p>`);
     const f = freshness(p, d, live);
     if (r.state === 'enter') {
-      const head = (p.re ? '<p><b>重新進場：</b>這檔之前依你的保本設定出場，今天收盤再創前一段新高。</p>' : '') + (p.target == null ? `<p>今天收盤出現${s}訊號，下一個交易日開盤附近買進（若一字漲停整天買不到就放棄這筆）。盤中碰到止損就出場；沒有固定止盈，收盤跌破 50 日均線、或持有滿 ${twRule.hold} 個交易日就出場。</p>`
+      const w = item.why, money = v => v >= 100 ? `${(v / 100).toFixed(1)} 億` : `${(v * 100).toLocaleString()} 萬`;
+      const whyTxt = !isTW() ? '' : p.re ? `<p><b>為什麼今天進場：</b>之前依你的保本設定出場，今天收盤 ${price(live)} 超過前一段最高收盤 ${price(p.reTop)}，代表又回到多頭。</p>`
+        : w ? `<h4>為什麼今天進場</h4><ul class="weak"><li>今天收盤 ${price(live)} 創 52 週新高（前 52 週最高 ${price(w.hi)}，還原權息價）</li>
+          <li>今天成交 ${money(w.val)}元，是近 20 天平均（${money(w.avg)}元）的 ${w.x} 倍，有大量資金買進</li>
+          ${item.rev ? `<li>${item.rev[0]} 月營收創 12 個月新高（年增 ${item.rev[1] == null ? '—' : pct(item.rev[1] / 100)}），基本面也在變好</li>` : ''}</ul>
+          <p class="meta"><b>為什麼止損在 ${price(p.stop)}：</b>進場價 − ${w.sl} 倍 ATR（近 14 天平均每天波動約 ${w.atr} 元）。留 3 倍正常波動的空間，平常震盪不會洗掉你；真的跌到這裡，代表這次突破失敗。<b>為什麼沒有止盈：</b>收盤跌破 50 日均線才賣，讓大漲的股票可以一直抱。</p>` : '';
+      const head = whyTxt + (p.target == null ? `<p>今天收盤出現${s}訊號，下一個交易日開盤附近買進（若一字漲停整天買不到就放棄這筆）。盤中碰到止損就出場；沒有固定止盈，收盤跌破 50 日均線、或持有滿 ${twRule.hold} 個交易日就出場。</p>`
         : `<p>最新 K 線收盤出現${s}訊號${isTW() ? '，下一個交易日開盤附近買進' : ''}，${MAX_HOLD} 根 K 線內兩邊都沒碰到就市價出場。</p>`) + `${levels(p)}${holdText(d, bars, p)}`;
       if (f !== 'ok') return { pri: 1, k: 'wait', label: '觀望', one: '訊號已過時，不追', text: `${head}<p class="alert">即時價 ${price(live)} ${FRESH[f]}，不建議進場。</p>` };
       const exitTxt = p.target == null ? `跌破 ${price(p.ma)} 出場` : `止盈 ${price(p.target)}`;
@@ -621,7 +627,7 @@ ${exitTxt}`, text: head + sizeText(live, p, d, r),
     if (mk) $('mktline').innerHTML = `<b>大盤：</b>加權指數 ${num(mk.c)}，離 60 日高點 ${pct(mk.off)}；${[['20', mk.m20], ['50', mk.m50], ['200', mk.m200]].map(([n, v]) => `${n} 日均線${mk.c >= v ? '之上' : '<b>之下</b>'}`).join('、')}。全部股票中 ${pct0(mk.breadth)} 站上自己的 50 日均線。`
       + (mk.c < mk.m50 ? '大盤正在轉弱。' : '') + `回測（研究十七）：大盤一轉弱就全部出場，長期反而賺得少很多、回落也沒有變小，所以規則不因大盤出場；擔心的話可以自己減碼，例如先賣一半。`;
     items = j.stocks.map(s => ({
-      sym: s.code, label: s.name, full: `${s.name}（${s.code}）`, tw: true, mkt: s.mkt, rev: s.rev, flow: s.flow, disp: s.disp, att: s.att, be: s.be, show: true, illiquid: s.illiquid, liq: s.liq, live: s.close, lastT: s.lastT,
+      sym: s.code, label: s.name, full: `${s.name}（${s.code}）`, tw: true, mkt: s.mkt, rev: s.rev, flow: s.flow, disp: s.disp, att: s.att, be: s.be, why: s.why, show: true, illiquid: s.illiquid, liq: s.liq, live: s.close, lastT: s.lastT,
       bars: s.chart ? s.chart.map(c => ({ t: c[0], o: c[1], h: c[2], l: c[3], c: c[4] })) : null,
       ma: s.chart ? s.chart.map(c => c[5]) : null,
       runs: [{ dir: 1, state: s.state, pos: s.pos, own: s.own, trades: [] }],

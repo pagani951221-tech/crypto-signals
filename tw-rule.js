@@ -75,7 +75,7 @@ function run(b, rev, opt = {}) {
     const again = !p && re && i > re.out && i <= re.until && x.liq[i] >= MIN_LIQ &&
       (reenter === 'high' ? x.c[i] > re.top : x.c[i] > x.sma20[i] && x.sma20[i] > x.sma50[i] && x.c[i - 1] <= x.sma20[i - 1]);
     if (!p && (again || (x.entry[i] && !x.entry[i - 1] && x.liq[i] >= MIN_LIQ && (rev === undefined || features(rev, b[i].t)?.high12))) && !(skip && skip(Math.min(i + 1, last)))) {
-      re = null;
+      const reTop = re?.top; re = null;
       if (i === last) { state = 'enter'; p = open(i, b[i].c); }
       else if (fill && lockUp(i + 1)) {
         lock.in++;
@@ -83,7 +83,7 @@ function run(b, rev, opt = {}) {
         if (fill === 'chase' && k <= last) p = { ...open(i, b[k].o), in: k };
         else lock.inMissed++;
       } else p = open(i, b[i + 1].o);
-      if (p && again) p.re = true;
+      if (p && again) { p.re = true; p.reTop = reTop; }
     }
   }
   if (p && state !== 'enter') state = 'hold';
