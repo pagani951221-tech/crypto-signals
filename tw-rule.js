@@ -38,18 +38,18 @@ function prep(b) {
 // 漲跌停 ±10%，價位跳動單位會讓實際漲停約 9.5～10%，用 9.5% 判斷
 const LIM = 0.095;
 function run(b, rev, opt = {}) {
-  const { hold = HOLD, sl = SL, ma: maN = 50, trail = 0, fill, skip, exitIf, be } = opt; // be：最高收盤曾賺到這個比例後，止損拉到成本價（含成本），研究十八 // skip(i)：第 i 根（進場日）不買；exitIf(i, p)：第 i 根收盤額外出場（研究十七）
+  const { hold = HOLD, sl = SL, ma: maN = 50, trail = 0, fill, skip, exitIf, be, reenter } = opt; // reenter：保本出場後 60 個交易日內 'high'＝收盤再創前一筆持有期間新高、'ma'＝收盤站回 20 日均線且 20 日線在 50 日線上，就重新進場（研究十九） // be：最高收盤曾賺到這個比例後，止損拉到成本價（含成本），研究十八 // skip(i)：第 i 根（進場日）不買；exitIf(i, p)：第 i 根收盤額外出場（研究十七）
   const lockUp = i => b[i].l >= b[i - 1].c * (1 + LIM), lockDown = i => b[i].h <= b[i - 1].c * (1 - LIM);
   const lock = { in: 0, inMissed: 0, out: 0 };
   const x = prep(b), trades = [], last = b.length - 1;
   const maLine = maN === 50 ? x.sma50 : maN ? x.c.map((_, i) => i < maN - 1 ? NaN : x.c.slice(i - maN + 1, i + 1).reduce((a, v) => a + v, 0) / maN) : null;
   const open = (i, px) => ({ in: i + 1, px, stop: px - sl * x.atr[i], target: null, top: px });
-  let p = null, state = 'wait';
+  let p = null, state = 'wait', re = null;
   for (let i = WARM; i <= last; i++) {
     if (p && i >= p.in) {
       const hs = b[i].l <= p.stop, time = i - p.in + 1 >= hold;
       p.top = Math.max(p.top, x.c[i]);
-      if (be && p.top >= p.px * (1 + be)) p.stop = Math.max(p.stop, p.px * (1 + TW_COST)); // 從隔天起生效
+      if (be && p.top >= p.px * (1 + be) && p.stop < p.px * (1 + TW_COST)) { p.stop = p.px * (1 + TW_COST); p.beOn = true; } // 從隔天起生效
       const weak = !!(exitIf && exitIf(i, p, x));
       const ma = (maLine && x.c[i] < maLine[i]) || (trail > 0 && x.c[i] < p.top - trail * x.atr[i]) || weak;
       const out = hs ? Math.min(b[i].o, p.stop) : ma || time ? b[i].c : null;
@@ -62,12 +62,16 @@ function run(b, rev, opt = {}) {
         p = null; i = k;
       } else if (out !== null) {
         trades.push({ in: p.in, out: i, t: b[p.in].t, T: b[i].t + 864e5, ret: out / p.px - 1 - TW_COST,
-          why: hs ? 'stop' : weak && !(maLine && x.c[i] < maLine[i]) ? 'weak' : ma ? 'ma' : 'time', px: p.px, stop: p.stop, target: null, exit: out });
+          why: hs ? (p.beOn ? 'be' : 'stop') : weak && !(maLine && x.c[i] < maLine[i]) ? 'weak' : ma ? 'ma' : 'time', px: p.px, stop: p.stop, target: null, exit: out, re: !!p.re });
+        re = reenter && hs && p.beOn ? { top: p.top, until: i + 60, out: i } : null;
         p = null;
       }
     }
     // 創新高要是「剛成立」：前一天不能也是訊號
-    if (!p && x.entry[i] && !x.entry[i - 1] && x.liq[i] >= MIN_LIQ && (rev === undefined || features(rev, b[i].t)?.high12) && !(skip && skip(Math.min(i + 1, last)))) {
+    const again = !p && re && i > re.out && i <= re.until && x.liq[i] >= MIN_LIQ &&
+      (reenter === 'high' ? x.c[i] > re.top : x.c[i] > x.sma20[i] && x.sma20[i] > x.sma50[i] && x.c[i - 1] <= x.sma20[i - 1]);
+    if (!p && (again || (x.entry[i] && !x.entry[i - 1] && x.liq[i] >= MIN_LIQ && (rev === undefined || features(rev, b[i].t)?.high12))) && !(skip && skip(Math.min(i + 1, last)))) {
+      re = null;
       if (i === last) { state = 'enter'; p = open(i, b[i].c); }
       else if (fill && lockUp(i + 1)) {
         lock.in++;
@@ -75,10 +79,11 @@ function run(b, rev, opt = {}) {
         if (fill === 'chase' && k <= last) p = { ...open(i, b[k].o), in: k };
         else lock.inMissed++;
       } else p = open(i, b[i + 1].o);
+      if (p && again) p.re = true;
     }
   }
   if (p && state !== 'enter') state = 'hold';
-  return { trades, state, pos: p, x, lock };
+  return { trades, state, pos: p, x, lock, re: re && last <= re.until ? re : null };
 }
 
 // 持有天數：整體與各種出場方式的中位數

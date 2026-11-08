@@ -92,14 +92,26 @@ async function loadRevenue() {
     if (dispOf[d.code]) o.disp = dispOf[d.code]; // [起, 迄, 每幾分鐘撮合, 是否每筆都要預收款券] // 最近 5 個交易日外資、投信、自營商淨買（張）
     if (d.f) o.rev = [d.f.ym, d.f.yoy1, d.f.high12 ? 1 : 0]; // 最新已公布月營收：月份、年增 %、是否創 12 個月新高
     // 還原權息價與實際價只在過去不同；最新一根相同，所以進場、止損、50 日均線直接用
-    if (p) {
+    // 部位資料（規則本身與保本設定的版本共用）
+    const posOf = p => {
       const entryT = p.in < b.length ? b[p.in].t : addWeekdays(b.at(-1).t, 1);
-      o.pos = { px: price(p.px), stop: price(p.stop), target: null, ma: price(ma50.at(-1)), t: entryT,
+      const q = { px: price(p.px), stop: price(p.stop), target: null, ma: price(ma50.at(-1)), t: entryT,
         held: p.in < b.length ? b.length - p.in : null, deadline: addWeekdays(entryT, R.HOLD - 1) + CLOSE };
+      if (p.beOn) q.beOn = true;
+      if (p.re) q.re = true;
       if (p.in < b.length) { // 轉弱檢查（只給人參考）：收在 20 日均線下、離持有期間最高收盤多遠、近 20 天比大盤強弱
         const cs = b.map(x => x.c), top = Math.max(...cs.slice(p.in));
-        o.pos.weak = { below20: cs.at(-1) < avg(cs, 20), off: +(cs.at(-1) / top - 1).toFixed(4), rs: market ? +(cs.at(-1) / cs.at(-21) - 1 - market.r20).toFixed(4) : null };
+        q.weak = { below20: cs.at(-1) < avg(cs, 20), off: +(cs.at(-1) / top - 1).toFixed(4), rs: market ? +(cs.at(-1) / cs.at(-21) - 1 - market.r20).toFixed(4) : null };
       }
+      return q;
+    };
+    if (p) o.pos = posOf(p);
+    // 網頁「保本出場」設定的各級版本（研究十八、十九）：曾賺到門檻後止損拉到成本，保本出場後 60 天內再創新高就重新進場
+    for (const lv of [0.1, 0.15, 0.2, 0.3]) {
+      const v = R.run(b, rev[d.code] || {}, { be: lv, reenter: 'high' }), lt = v.trades.at(-1);
+      const closed = lt && lt.out === b.length - 1 && lt.why === 'be' ? { exit: price(lt.exit) } : null;
+      if (!v.pos && !v.re && !closed) continue;
+      (o.be ||= {})[lv] = { state: v.state, ...(v.pos ? { pos: posOf(v.pos) } : {}), ...(v.re ? { re: { top: price(v.re.top), left: v.re.until - (b.length - 1) } } : {}), ...(closed ? { closed } : {}) };
     }
     const t = r.trades.at(-1);
     if (t && t.out === b.length - 1) o.closed = { why: t.why, px: price(t.px), exit: price(t.exit), stop: price(t.stop) };

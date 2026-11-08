@@ -332,20 +332,12 @@
       + `最長 ${MAX_HOLD} 根 K 線，最晚${isTW() ? '約' : ''} <b>${when(p.deadline ?? deadline(bars, p))}</b> 收盤出場。</p>`;
   };
 
-  // 保本出場（研究十八，只有台股、只在網頁）：持有期間最高收盤曾比進場價高出設定比例，之後收盤回到成本價（含交易成本）以下就建議出場
-  const beOf = (p, live) => {
-    const trig = +$('be').value;
-    if (!isTW() || !trig || !p.weak) return null;
-    const px = p.px * (1 + twCost), gain = live / (1 + p.weak.off) / p.px - 1;
-    return px <= p.stop ? null : { armed: gain >= trig, px, gain, need: p.px * (1 + trig) };
-  };
-  const levels = (p, live) => `<dl class="levels">
+  const levels = p => `<dl class="levels">
       <div><dt>進場</dt><dd>${price(p.px)}</dd></div>
-      <div><dt>止損</dt><dd>${price(p.stop)}<small>${pct(p.stop / p.px - 1)}</small></dd></div>
+      <div><dt>${p.beOn ? '止損（保本設定：已拉到成本）' : '止損'}</dt><dd>${price(p.stop)}<small>${p.beOn ? '建議在券商掛這個價格的停損單' : pct(p.stop / p.px - 1)}</small></dd></div>
       ${p.target == null ? `<div><dt>出場線（50 日均線）</dt><dd>${price(p.ma)}<small>收盤跌破就出場</small></dd></div>`
         : `<div><dt>止盈</dt><dd>${price(p.target)}<small>${pct(p.target / p.px - 1)}</small></dd></div>`}
-      ${(b => !b ? '' : b.armed ? `<div><dt>保本線（你的設定）</dt><dd>${price(b.px)}<small>曾賺 ${pct(b.gain)}，收盤回到這裡以下就賣</small></dd></div>`
-        : `<div><dt>保本線（你的設定）</dt><dd>未啟動<small>收盤漲到 ${price(b.need)} 以上才啟動</small></dd></div>`)(live == null ? null : beOf(p, live))}</dl>`;
+</dl>`;
 
   // 一個方向的判斷：pri 越高越優先決定這個幣的標籤；one＝格子裡的一行字，text＝詳細面板內容
   function lineFor(r, item) {
@@ -353,10 +345,14 @@
     const wait = (one, text) => ({ pri: 0, k: 'wait', label: '觀望', one, text });
     if (d < 0 && item.perp === false) return wait('無合約，不能放空', '<p>此幣在 Binance 沒有 USDT 永續合約，無法放空。</p>');
     if (!coinOk(o)) return wait('本幣歷史虧損，跳過', `<p>這條${s}規則在此幣歷史上是虧的，跳過。</p>`);
+    if (r.beClosed) return { pri: 2, k: 'wait', label: '保本出場', one: `今天跌到成本價，約 ${price(r.beClosed.exit)} 出場`,
+      text: `<p class="alert"><b>依你的保本設定：</b>這筆曾賺到門檻，今天盤中跌到成本價，保本出場（成交約 ${price(r.beClosed.exit)}；開盤就跳空在成本價以下時會比成本低一些）。規則本身可能還沒出場。之後 60 個交易日內收盤再創前一段的新高，就會提示重新進場。</p>` };
+    if (r.re) return { pri: 1, k: 'wait', label: '等重新進場', one: `收盤超過 ${price(r.re.top)} 再買`,
+      text: `<p>依你的保本設定，這檔之前已保本出場。接下來 ${r.re.left} 個交易日內，收盤超過前一段的最高收盤 ${price(r.re.top)}，就重新進場（研究十九）；原本的進場訊號也照樣有效。</p>` };
     if (r.state === 'wait') return wait('尚無訊號', `<p>尚未出現${s}訊號。訊號只在 K 線收盤後變動。</p>`);
     const f = freshness(p, d, live);
     if (r.state === 'enter') {
-      const head = (p.target == null ? `<p>今天收盤出現${s}訊號，下一個交易日開盤附近買進（若一字漲停整天買不到就放棄這筆）。盤中碰到止損就出場；沒有固定止盈，收盤跌破 50 日均線、或持有滿 ${twRule.hold} 個交易日就出場。</p>`
+      const head = (p.re ? '<p><b>重新進場：</b>這檔之前依你的保本設定出場，今天收盤再創前一段新高。</p>' : '') + (p.target == null ? `<p>今天收盤出現${s}訊號，下一個交易日開盤附近買進（若一字漲停整天買不到就放棄這筆）。盤中碰到止損就出場；沒有固定止盈，收盤跌破 50 日均線、或持有滿 ${twRule.hold} 個交易日就出場。</p>`
         : `<p>最新 K 線收盤出現${s}訊號${isTW() ? '，下一個交易日開盤附近買進' : ''}，${MAX_HOLD} 根 K 線內兩邊都沒碰到就市價出場。</p>`) + `${levels(p)}${holdText(d, bars, p)}`;
       if (f !== 'ok') return { pri: 1, k: 'wait', label: '觀望', one: '訊號已過時，不追', text: `${head}<p class="alert">即時價 ${price(live)} ${FRESH[f]}，不建議進場。</p>` };
       const exitTxt = p.target == null ? `跌破 ${price(p.ma)} 出場` : `止盈 ${price(p.target)}`;
@@ -370,10 +366,7 @@ ${exitTxt}`, text: head + sizeText(live, p, d, r),
       <li>離持有期間最高收盤 ${wk.off < -0.15 ? `<b>${pct(wk.off)}</b>` : pct(wk.off)}</li>
       ${wk.rs == null ? '' : `<li>近 20 天比大盤${wk.rs >= 0 ? '強' : '弱'} ${wk.rs < -0.1 ? `<b>${`${(Math.abs(wk.rs) * 100).toFixed(1)}%`}</b>` : `${(Math.abs(wk.rs) * 100).toFixed(1)}%`}</li>`}</ul>
       <p class="meta">研究十七回測過：跌破 20 日均線、從高點回落 15%、比大盤弱 10% 就提早出場，長期都比照規則（跌破 50 日均線才賣）賺得少。這幾項只是讓你知道目前狀況；想降低風險可以自己先賣一部分。</p>` : '';
-    const now = `<p>規則已在 ${when(p.t ?? bars[p.in].t)} ${s}，${isTW() ? '收盤價' : '即時價'} ${price(live)}（${pct(d * (live / p.px - 1))}）。</p>${levels(p, live)}${holdText(d, bars, p, held)}${weakTxt}`;
-    const bk = beOf(p, live);
-    if (bk?.armed && live <= bk.px) return { pri: 2, k: 'wait', label: '保本出場', one: `回到成本 ${price(bk.px)}，依你的設定出場`,
-      text: `${now}<p class="alert"><b>依你的保本設定：</b>這筆持有期間曾賺 ${pct(bk.gain)}，收盤已回到成本價（含交易成本）${price(bk.px)} 以下，建議下一個交易日出場。規則本身還沒出場（止損 ${price(p.stop)}、50 日均線 ${price(p.ma)}）。</p>` };
+    const now = `<p>規則已在 ${when(p.t ?? bars[p.in].t)} ${s}，${isTW() ? '收盤價' : '即時價'} ${price(live)}（${pct(d * (live / p.px - 1))}）。</p>${levels(p)}${holdText(d, bars, p, held)}${weakTxt}`;
     if (f === 'stop' || f === 'target') return { pri: 1, k: 'wait', label: '觀望', one: `已到${f === 'stop' ? '止損' : '止盈'}位`, text: `${now}<p class="alert">即時價已到${f === 'stop' ? '止損' : '止盈'}位，這筆應已出場，等下一次訊號。</p>` };
     return { pri: 2, k: 'hold', label: d > 0 ? '持有多單' : '持有空單', one: `${pct(d * (live / p.px - 1))}，已持有 ${dur(held)}${isTW() ? `（最多 ${twRule.hold}）` : ''}`, text: `${now}<p>已進場者照這組${p.target == null ? '止損與 50 日均線' : '止損止盈'}續抱；未進場者不追價，等下一次訊號。</p>` };
   }
@@ -383,7 +376,10 @@ ${exitTxt}`, text: head + sizeText(live, p, d, r),
     if (item.err) return { k: 'err', label: '無資料', one: item.err, lines: [] };
     if (item.illiquid) return { k: 'wait', label: '觀望', one: '成交量太小，跳過', pri: -1,
       lines: [{ text: `<p>近 20 天平均每天成交約 ${item.liq.toLocaleString()} 萬元，不到 1,000 萬元。成交量太小，價差與滑價會吃掉利潤，所以不給訊號。</p>` }] };
-    const lines = item.runs.filter(r => val[r.dir].pass).map(r => lineFor(r, item));
+    // 台股開了保本設定：改用雲端照這個設定算好的部位（含保本出場與重新進場）
+    const lv = isTW() ? +$('be').value : 0, bv = lv ? item.be?.[lv] : null;
+    const runs = lv ? item.runs.map(r => ({ ...r, state: bv?.state ?? 'wait', pos: bv?.pos ?? null, re: bv?.re, beClosed: bv?.closed })) : item.runs;
+    const lines = runs.filter(r => val[r.dir].pass).map(r => lineFor(r, item));
     if (!lines.length) return { k: 'wait', label: '觀望', one: '規則未通過驗證', lines, pri: -1 };
     const top = lines.reduce((m, l) => l.pri > m.pri ? l : m);
     return { ...top, lines };
@@ -449,13 +445,13 @@ ${exitTxt}`, text: head + sizeText(live, p, d, r),
       $('reason').textContent = isTW() ? '台股規則目前沒有通過逐年滾動驗證，所有股票都建議觀望。下方可以看逐年成績。' : `${TF[tf].label}的規則沒有通過逐年滾動驗證，照技術訊號買賣在歷史上是虧的，所有幣都建議觀望。` + (tf !== '1d' ? '要看有效的預報，請把週期切換到日線。' : '');
       return;
     }
-    const act = shown.filter(s => s.j.pri === 3), hold = shown.filter(s => s.j.pri === 2);
+    const act = shown.filter(s => s.j.pri === 3), hold = shown.filter(s => s.j.pri === 2 && s.j.k === 'hold'), beOut = shown.filter(s => s.j.label === '保本出場');
     const parts = act.length + hold.length > 5
-      ? [act.length && `${act.length} ${UNIT()}可進場`, hold.length && `${hold.length} ${UNIT()}持有中`].filter(Boolean)
-      : [...act.map(s => `${s.item.label ?? s.item.sym} 可${s.j.label}`), ...hold.map(s => `${s.item.label ?? s.item.sym} ${s.j.label}`)];
-    const rest = shown.length - act.length - hold.length;
+      ? [act.length && `${act.length} ${UNIT()}可進場`, hold.length && `${hold.length} ${UNIT()}持有中`, beOut.length && `${beOut.length} ${UNIT()}保本出場`].filter(Boolean)
+      : [...act.map(s => `${s.item.label ?? s.item.sym} 可${s.j.label}`), ...hold.map(s => `${s.item.label ?? s.item.sym} ${s.j.label}`), ...beOut.map(s => `${s.item.label ?? s.item.sym} 保本出場`)];
+    const rest = shown.length - act.length - hold.length - beOut.length, reN = shown.filter(s => s.j.label === '等重新進場').length;
     $('headline').textContent = '今日行動預報：' + (parts.length ? parts.join('、') + (rest ? '，其餘觀望' : '') : '全部觀望');
-    $('reason').textContent = act.length ? `點有訊號的${isTW() ? '股票看進場、止損、出場線' : '幣看進場、止損、止盈'}與建議倉位。` : hold.length ? '持有中的部位照原本的止損止盈處理；沒有新的進場訊號。' : `規則仍然有效，只是還沒有任何${isTW() ? '股票' : '幣'}出現進場訊號。訊號只在每根 K 線收盤後變動。`;
+    $('reason').textContent = (act.length ? `點有訊號的${isTW() ? '股票看進場、止損、出場線' : '幣看進場、止損、止盈'}與建議倉位。` : hold.length ? '持有中的部位照原本的止損止盈處理；沒有新的進場訊號。' : `規則仍然有效，只是還沒有任何${isTW() ? '股票' : '幣'}出現進場訊號。訊號只在每根 K 線收盤後變動。`) + (reN ? `另有 ${reN} 檔依你的保本設定出場後，在等重新進場（用「查看其他股票」可以看）。` : '');
   }
 
   // 像雨量圖的分級色帶：每級的字色都選過對比
@@ -624,7 +620,7 @@ ${exitTxt}`, text: head + sizeText(live, p, d, r),
     if (mk) $('mktline').innerHTML = `<b>大盤：</b>加權指數 ${num(mk.c)}，離 60 日高點 ${pct(mk.off)}；${[['20', mk.m20], ['50', mk.m50], ['200', mk.m200]].map(([n, v]) => `${n} 日均線${mk.c >= v ? '之上' : '<b>之下</b>'}`).join('、')}。全部股票中 ${pct0(mk.breadth)} 站上自己的 50 日均線。`
       + (mk.c < mk.m50 ? '大盤正在轉弱。' : '') + `回測（研究十七）：大盤一轉弱就全部出場，長期反而賺得少很多、回落也沒有變小，所以規則不因大盤出場；擔心的話可以自己減碼，例如先賣一半。`;
     items = j.stocks.map(s => ({
-      sym: s.code, label: s.name, full: `${s.name}（${s.code}）`, tw: true, mkt: s.mkt, rev: s.rev, flow: s.flow, disp: s.disp, att: s.att, show: true, illiquid: s.illiquid, liq: s.liq, live: s.close, lastT: s.lastT,
+      sym: s.code, label: s.name, full: `${s.name}（${s.code}）`, tw: true, mkt: s.mkt, rev: s.rev, flow: s.flow, disp: s.disp, att: s.att, be: s.be, show: true, illiquid: s.illiquid, liq: s.liq, live: s.close, lastT: s.lastT,
       bars: s.chart ? s.chart.map(c => ({ t: c[0], o: c[1], h: c[2], l: c[3], c: c[4] })) : null,
       ma: s.chart ? s.chart.map(c => c[5]) : null,
       runs: [{ dir: 1, state: s.state, pos: s.pos, own: s.own, trades: [] }],
