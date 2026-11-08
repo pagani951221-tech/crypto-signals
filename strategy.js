@@ -203,6 +203,18 @@ function walkForward(runs) {
     pass: gate(Infinity) && wf.n >= 30 && wf.avg > 0 && wf.t >= 1 };
 }
 
+// Telegram 用：這根 K 線為什麼進場、止損止盈為什麼在這裡（bars 最後一根是訊號根）
+function whyEntry(bars, d, pos, ex, fmt = String) {
+  const x = indicators(bars), i = bars.length - 1, c = x.c[i], lvl = d > 0 ? x.hh20[i] : x.ll20[i], ma = x.sma200[i];
+  const dist = Math.abs(pos.stop / pos.px - 1) * 100, sign = v => (v >= 0 ? '+' : '−') + Math.abs(v).toFixed(1) + '%';
+  return ['為什麼今天進場：',
+    `・收盤 ${fmt(c)} ${d > 0 ? '突破前 20 根最高' : '跌破前 20 根最低'} ${fmt(lvl)}，${d > 0 ? '價格往上走出區間' : '價格往下走出區間'}`,
+    `・收盤在 200 均線 ${fmt(ma)} ${d > 0 ? '之上' : '之下'}（${sign((c / ma - 1) * 100)}），長期趨勢${d > 0 ? '向上' : '向下'}`,
+    `・MACD 在訊號線${d > 0 ? '上方，短期動能轉強' : '下方，短期動能轉弱'}`,
+    `為什麼止損在 ${fmt(pos.stop)}：進場價 ${d > 0 ? '−' : '＋'} ${ex.sl} 倍 ATR（近 14 根平均每根波動約 ${fmt(x.atr[i])}），距離 ${dist.toFixed(1)}%。留 ${ex.sl} 倍正常波動的空間，真的碰到代表這次${d > 0 ? '突破' : '跌破'}失敗${d > 0 ? `；距離超過 ${MAX_STOP * 100}% 的幣規則不做` : ''}`,
+    `為什麼止盈在 ${fmt(pos.target)}：止損距離的 ${+(ex.tp / ex.sl).toFixed(2)} 倍，賺的要比虧的多`];
+}
+
 // 規則通過合併驗證後，個別幣自己的歷史也不能是虧的
 const coinOk = own => own.n < 10 || own.avg > 0;
 
@@ -364,7 +376,7 @@ async function livePrice(symbol) {
 }
 
 if (typeof module !== 'undefined') {
-  module.exports = { sma, ema, rsi, indicators, candidates, makeCand, backtest, stats, runRule, walkForward, sizing, freshness, coinOk, exitFor,
+  module.exports = { sma, ema, rsi, indicators, candidates, makeCand, backtest, stats, runRule, walkForward, sizing, freshness, coinOk, exitFor, whyEntry,
     plan, holdStats, deadline, fetchBars, fundingFn, fetchFunding, allPrices, topCoins, ourbitCoins, pool, BASKET, TF, MAX_HOLD };
 
   if (require.main === module) (async () => {
@@ -433,6 +445,8 @@ if (typeof module !== 'undefined') {
     assert.ok(hasTrade(runRule(late, 1, NO_FUNDING, RULE.ex, Infinity)));
     assert.ok(!hasTrade(runRule(late, 1, NO_FUNDING, RULE.ex, 0)));
     assert.ok(hasTrade(runRule(edge, 1, NO_FUNDING, RULE.ex, 0)));
+    const why = whyEntry(late.slice(0, 251), 1, { px: 100, stop: 90, target: 120 }, { sl: 3, tp: 6 });
+    assert.strictEqual(why.length, 6); assert.ok(why[1].includes('突破前 20 根最高 100')); assert.ok(why[4].includes('距離 10.0%')); assert.ok(why[5].includes('2 倍'));
     // 滾動式驗證：2020 年之前沒有交易 → 2020 不允許；2020 的 60 筆賺錢 → 2021 允許
     const tr = (y, k) => Array.from({ length: k }, (_, j) => ({ t: Date.UTC(y, 1, 1), T: Date.UTC(y, 2, 1), ret: j % 2 ? 0.02 : 0.001 }));
     const w = walkForward([{ trades: [...tr(2020, 60), ...tr(2021, 40)] }]);

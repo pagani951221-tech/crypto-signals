@@ -74,6 +74,7 @@ const entryT = (it, p) => p.in < it.bars.length ? it.bars[p.in].t : it.bars.at(-
     const blocks = [
       ...sigs.map(({ it, r }) => [`${it.sym}　日線${SIDE(r.dir)}`,
         `參考進場 ${price(r.pos.px)}（即時 ${price(it.live)}）`,
+        ...S.whyEntry(it.bars, r.dir, r.pos, ex, price),
         `止損 ${price(r.pos.stop)}（${pct(r.pos.stop / r.pos.px - 1)}）`,
         `止盈 ${price(r.pos.target)}（${pct(r.pos.target / r.pos.px - 1)}）`,
         `預計持有：通常 ${val[r.dir].hold.med} 天，最晚 ${day(S.deadline(it.bars, r.pos))} 早上 8 點出場`,
