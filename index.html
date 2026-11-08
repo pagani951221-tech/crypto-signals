@@ -391,7 +391,8 @@ ${exitTxt}`, text: head + sizeText(live, p, d, r),
       : '讀不到這檔的三大法人買賣超。';
     const dp = it.disp, md = d => d.slice(5).replace('-', '/');
     const dispTxt = dp ? `<p class="alert"><b>處置股（${md(dp[0])}～${md(dp[1])}）：</b>約每 ${dp[2] ?? '幾'} 分鐘才撮合一次，${dp[3] ? '每筆買進都要先把錢存進券商（預收款券）' : '單筆 10 張或當天累積 30 張以上要先把錢存進券商（預收款券）'}，成交價可能和開盤價差比較多。回測（研究十五）進場時已是處置股的交易並沒有比較差，所以規則不避開。</p>` : '';
-    return `${dispTxt}<h4>營收與消息</h4><p>${revTxt}</p>
+    const at = it.att, attTxt = at && !dp ? `<p class="alert"><b>注意股：</b>最近 10 個交易日被公布注意 ${at[0]} 次（最後一次 ${md(at[1])}）。再累積下去可能變成處置股（分盤撮合、要先把錢存進券商）。回測（研究十六）注意股的訊號歷史上並沒有比較差，所以規則不避開。</p>` : '';
+    return `${dispTxt}${attTxt}<h4>營收與消息</h4><p>${revTxt}</p>
       <p>${flowTxt}</p><p class="meta">法人買賣超只供參考、不列入判斷：回測 2018 年起的資料，加上法人買超的條件並沒有比較好（研究十）。</p>
       <p class="meta">Yahoo 股市（另開視窗）：${a('news', '新聞')} · ${a('revenue', '月營收')} · ${a('eps', 'EPS')}。新聞不列入判斷：沒有可以回測的歷史資料，看了再自己決定要不要避開。</p>`;
   }
@@ -599,7 +600,7 @@ ${exitTxt}`, text: head + sizeText(live, p, d, r),
     catch { $('go').disabled = false; $('headline').textContent = '暫時讀不到台股資料'; $('reason').textContent = '台股資料由雲端每個交易日 14:40 後更新，請稍後再試。'; $('status').textContent = ''; return; }
     twCost = j.cost; twValid = j.nValid ?? j.stocks.length; twRule = j.rule ?? twRule; twFlowDays = j.flowDays ?? [];
     items = j.stocks.map(s => ({
-      sym: s.code, label: s.name, full: `${s.name}（${s.code}）`, tw: true, mkt: s.mkt, rev: s.rev, flow: s.flow, disp: s.disp, show: true, illiquid: s.illiquid, liq: s.liq, live: s.close, lastT: s.lastT,
+      sym: s.code, label: s.name, full: `${s.name}（${s.code}）`, tw: true, mkt: s.mkt, rev: s.rev, flow: s.flow, disp: s.disp, att: s.att, show: true, illiquid: s.illiquid, liq: s.liq, live: s.close, lastT: s.lastT,
       bars: s.chart ? s.chart.map(c => ({ t: c[0], o: c[1], h: c[2], l: c[3], c: c[4] })) : null,
       ma: s.chart ? s.chart.map(c => c[5]) : null,
       runs: [{ dir: 1, state: s.state, pos: s.pos, own: s.own, trades: [] }],

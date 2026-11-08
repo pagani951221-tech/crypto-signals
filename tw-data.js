@@ -113,6 +113,23 @@ async function disposals(from, to) {
   return rows.filter(r => COMMON.test(r.code) && r.start);
 }
 
+// 注意股公告（上市 notice、上櫃 attention）：from、to＝'YYYY-MM-DD'。回傳 { 代號: ['YYYY-MM-DD', …] }
+// 研究十六：注意股的訊號歷史上反而比較好，所以只用來提醒（注意次數累積會變處置股）
+async function attention(from, to) {
+  const roc = s => { const m = String(s).match(/(\d{2,3})[./](\d{1,2})[./](\d{1,2})/); return m ? `${+m[1] + 1911}-${m[2].padStart(2, '0')}-${m[3].padStart(2, '0')}` : null; };
+  const ua = { headers: { 'User-Agent': 'Mozilla/5.0' } }, get = url => fetch(url, ua).then(r => r.json()).catch(() => ({}));
+  const [a, b] = await Promise.all([
+    get(`https://www.twse.com.tw/rwd/zh/announcement/notice?querytype=1&startDate=${from.replace(/-/g, '')}&endDate=${to.replace(/-/g, '')}&response=json`),
+    get(`https://www.tpex.org.tw/www/zh-tw/bulletin/attention?startDate=${from.replace(/-/g, '/')}&endDate=${to.replace(/-/g, '/')}&response=json`),
+  ]);
+  const db = {};
+  for (const [c, d] of [...(a.data || []).map(r => [r[1], r[5]]), ...(b.tables?.[0]?.data || []).map(r => [r[1], r[5]])]) {
+    const code = String(c).trim(), dt = roc(d);
+    if (COMMON.test(code) && dt) (db[code] ||= new Set()).add(dt);
+  }
+  return Object.fromEntries(Object.entries(db).map(([c, v]) => [c, [...v].sort()]));
+}
+
 // 往後數 n 個交易日（只跳過週末，沒扣國定假日，所以是「約」）
 function addWeekdays(t, n) {
   let x = t;
@@ -120,4 +137,4 @@ function addWeekdays(t, n) {
   return x;
 }
 
-module.exports = { TW_COST, ADJ, universe, universeAll, bars, revenue, flows, disposals, addWeekdays };
+module.exports = { TW_COST, ADJ, universe, universeAll, bars, revenue, flows, disposals, attention, addWeekdays };

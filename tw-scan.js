@@ -5,7 +5,7 @@ const fs = require('fs');
 const S = require('./strategy.js');
 const R = require('./tw-rule.js');
 const { send } = require('./telegram.js');
-const { TW_COST, universeAll, bars, revenue, flows, disposals, addWeekdays } = require('./tw-data.js');
+const { TW_COST, universeAll, bars, revenue, flows, disposals, attention, addWeekdays } = require('./tw-data.js');
 
 const REV = '.state/tw-rev.json';
 const LOG = 'tw-log.json'; // 上線後真實發出的訊號，只新增不改寫（規則以後改了，舊紀錄也不會被重算） // 月營收歷史，由 Actions 快取保存，每天只補抓缺的月份
@@ -50,6 +50,9 @@ async function loadRevenue() {
   for (const d of (await disposals(ymd(Date.now() - 31 * 864e5), today).catch(() => [])).filter(d => d.end >= today).sort((a, b) => a.start.localeCompare(b.start)))
     dispOf[d.code] = [d.start, d.end, d.minutes, d.all ? 1 : 0];
   console.log(`處置股：${Object.keys(dispOf).length} 檔`);
+  // 注意股：最近 10 個交易日（含今天，若已公布）被公布注意幾次
+  const d10 = ymd(ref.b.at(-10).t), attOf = await attention(d10, today).catch(() => ({}));
+  console.log(`注意股：最近 10 個交易日有 ${Object.keys(attOf).length} 檔`);
   const flowOf = code => { const v = fl.map(f => f[1][code]).filter(Boolean); return v.length ? [0, 1, 2].map(j => Math.round(v.reduce((s, x) => s + x[j], 0) / 1000)) : null; };
   for (const d of data) {
     const last20 = d.b.slice(-20);
@@ -75,6 +78,7 @@ async function loadRevenue() {
     if (!d.ok) o.illiquid = true;
     const f5 = flowOf(d.code);
     if (f5) o.flow = f5;
+    if (attOf[d.code]) o.att = [attOf[d.code].length, attOf[d.code].at(-1)]; // [最近 10 個交易日被注意次數, 最後一次日期]
     if (dispOf[d.code]) o.disp = dispOf[d.code]; // [起, 迄, 每幾分鐘撮合, 是否每筆都要預收款券] // 最近 5 個交易日外資、投信、自營商淨買（張）
     if (d.f) o.rev = [d.f.ym, d.f.yoy1, d.f.high12 ? 1 : 0]; // 最新已公布月營收：月份、年增 %、是否創 12 個月新高
     // 還原權息價與實際價只在過去不同；最新一根相同，所以進場、止損、50 日均線直接用
@@ -171,6 +175,7 @@ async function loadRevenue() {
       `參考進場 ${s.pos.px}（今天收盤），明天開盤附近買進；若一字漲停整天買不到就放棄這筆`,
       `止損 ${s.pos.stop}（${pct(s.pos.stop / s.pos.px - 1)}），盤中碰到就出場`,
       `沒有固定止盈：收盤跌破 50 日均線（目前 ${s.pos.ma}）就出場`,
+      ...(s.att && !s.disp ? [`注意股：最近 10 個交易日被注意 ${s.att[0]} 次（再累積可能變成處置股，改為分盤撮合、要先存錢）`] : []),
       ...(s.disp ? [`處置股（到 ${s.disp[1].slice(5).replace('-', '/')}）：約每 ${s.disp[2] ?? '幾'} 分鐘撮合一次，${s.disp[3] ? '每筆買進都要先把錢存進券商' : '單筆 10 張或當天累積 30 張以上要先把錢存進券商'}；成交價可能和開盤價差比較多`] : []),
       `營收：${s.rev ? `${s.rev[0]} 月營收年增 ${s.rev[1] == null ? '—' : pct(s.rev[1] / 100)}，創 12 個月新高` : '—'}`,
       `新聞：https://tw.stock.yahoo.com/quote/${s.code}.${s.mkt}/news`,
