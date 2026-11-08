@@ -32,20 +32,33 @@ function prep(b) {
 
 // 和 strategy.js 的 backtest 同樣的格式：trades、state（wait／enter／hold）、pos
 // rev 不傳（undefined）＝不用營收濾網，研究對照用；傳了但沒資料＝不進場
-// opt（研究十一用，平常不傳）：hold 最多持有天數、sl 止損 ATR 倍數、ma 跌破幾日均線出場（0＝不用）、trail 從進場後最高收盤回落幾 ATR 出場（0＝不用）
+// opt（研究用，平常不傳）：hold 最多持有天數、sl 止損 ATR 倍數、ma 跌破幾日均線出場（0＝不用）、trail 從進場後最高收盤回落幾 ATR 出場（0＝不用）
+// fill（研究十二）：'skip'＝進場日一字漲停買不到就放棄；'chase'＝順延到第一個沒鎖漲停的交易日開盤買。
+//   有設 fill 時，出場日一字跌停（或收盤出場時收在跌停）賣不掉，順延到第一個沒鎖跌停的交易日開盤賣
+// 漲跌停 ±10%，價位跳動單位會讓實際漲停約 9.5～10%，用 9.5% 判斷
+const LIM = 0.095;
 function run(b, rev, opt = {}) {
-  const { hold = HOLD, sl = SL, ma: maN = 50, trail = 0 } = opt;
+  const { hold = HOLD, sl = SL, ma: maN = 50, trail = 0, fill } = opt;
+  const lockUp = i => b[i].l >= b[i - 1].c * (1 + LIM), lockDown = i => b[i].h <= b[i - 1].c * (1 - LIM);
+  const lock = { in: 0, inMissed: 0, out: 0 };
   const x = prep(b), trades = [], last = b.length - 1;
   const maLine = maN === 50 ? x.sma50 : maN ? x.c.map((_, i) => i < maN - 1 ? NaN : x.c.slice(i - maN + 1, i + 1).reduce((a, v) => a + v, 0) / maN) : null;
   const open = (i, px) => ({ in: i + 1, px, stop: px - sl * x.atr[i], target: null, top: px });
   let p = null, state = 'wait';
   for (let i = WARM; i <= last; i++) {
-    if (p) {
+    if (p && i >= p.in) {
       const hs = b[i].l <= p.stop, time = i - p.in + 1 >= hold;
       p.top = Math.max(p.top, x.c[i]);
       const ma = (maLine && x.c[i] < maLine[i]) || (trail > 0 && x.c[i] < p.top - trail * x.atr[i]);
       const out = hs ? Math.min(b[i].o, p.stop) : ma || time ? b[i].c : null;
-      if (out !== null) {
+      if (out !== null && fill && (lockDown(i) || (!hs && b[i].c <= b[i - 1].c * (1 - LIM)))) {
+        lock.out++;
+        let k = i + 1; while (k <= last && lockDown(k)) k++;
+        if (k > last) break; // 到最新一根都還鎖跌停：部位留著
+        trades.push({ in: p.in, out: k, t: b[p.in].t, T: b[k].t + 864e5, ret: b[k].o / p.px - 1 - TW_COST,
+          why: hs ? 'stop' : ma ? 'ma' : 'time', px: p.px, stop: p.stop, target: null, exit: b[k].o });
+        p = null; i = k;
+      } else if (out !== null) {
         trades.push({ in: p.in, out: i, t: b[p.in].t, T: b[i].t + 864e5, ret: out / p.px - 1 - TW_COST,
           why: hs ? 'stop' : ma ? 'ma' : 'time', px: p.px, stop: p.stop, target: null, exit: out });
         p = null;
@@ -54,11 +67,16 @@ function run(b, rev, opt = {}) {
     // 創新高要是「剛成立」：前一天不能也是訊號
     if (!p && x.entry[i] && !x.entry[i - 1] && x.liq[i] >= MIN_LIQ && (rev === undefined || features(rev, b[i].t)?.high12)) {
       if (i === last) { state = 'enter'; p = open(i, b[i].c); }
-      else p = open(i, b[i + 1].o);
+      else if (fill && lockUp(i + 1)) {
+        lock.in++;
+        let k = i + 1; while (fill === 'chase' && k <= last && lockUp(k)) k++;
+        if (fill === 'chase' && k <= last) p = { ...open(i, b[k].o), in: k };
+        else lock.inMissed++;
+      } else p = open(i, b[i + 1].o);
     }
   }
   if (p && state !== 'enter') state = 'hold';
-  return { trades, state, pos: p, x };
+  return { trades, state, pos: p, x, lock };
 }
 
 // 持有天數：整體與各種出場方式的中位數
