@@ -32,13 +32,18 @@ function prep(b) {
 
 // 和 strategy.js 的 backtest 同樣的格式：trades、state（wait／enter／hold）、pos
 // rev 不傳（undefined）＝不用營收濾網，研究對照用；傳了但沒資料＝不進場
-function run(b, rev) {
+// opt（研究十一用，平常不傳）：hold 最多持有天數、sl 止損 ATR 倍數、ma 跌破幾日均線出場（0＝不用）、trail 從進場後最高收盤回落幾 ATR 出場（0＝不用）
+function run(b, rev, opt = {}) {
+  const { hold = HOLD, sl = SL, ma: maN = 50, trail = 0 } = opt;
   const x = prep(b), trades = [], last = b.length - 1;
-  const open = (i, px) => ({ in: i + 1, px, stop: px - SL * x.atr[i], target: null });
+  const maLine = maN === 50 ? x.sma50 : maN ? x.c.map((_, i) => i < maN - 1 ? NaN : x.c.slice(i - maN + 1, i + 1).reduce((a, v) => a + v, 0) / maN) : null;
+  const open = (i, px) => ({ in: i + 1, px, stop: px - sl * x.atr[i], target: null, top: px });
   let p = null, state = 'wait';
   for (let i = WARM; i <= last; i++) {
     if (p) {
-      const hs = b[i].l <= p.stop, ma = x.c[i] < x.sma50[i], time = i - p.in + 1 >= HOLD;
+      const hs = b[i].l <= p.stop, time = i - p.in + 1 >= hold;
+      p.top = Math.max(p.top, x.c[i]);
+      const ma = (maLine && x.c[i] < maLine[i]) || (trail > 0 && x.c[i] < p.top - trail * x.atr[i]);
       const out = hs ? Math.min(b[i].o, p.stop) : ma || time ? b[i].c : null;
       if (out !== null) {
         trades.push({ in: p.in, out: i, t: b[p.in].t, T: b[i].t + 864e5, ret: out / p.px - 1 - TW_COST,
