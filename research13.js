@@ -33,8 +33,8 @@ function sim(N, seed, from = 0) {
   const eq = [];
   for (let d = from; d < dates.length; d++) {
     // 先出場（出場價已含成本），再用開盤進場
-    for (const p of open.filter(p => p.t.z === d)) { cash += p.amt * (1 + p.t.ret); streak = p.t.ret < 0 ? streak + 1 : 0; worstStreak = Math.max(worstStreak, streak); }
-    open = open.filter(p => p.t.z !== d);
+    for (const p of open.filter(p => p.t.z < d)) { cash += p.amt * (1 + p.t.ret); streak = p.t.ret < 0 ? streak + 1 : 0; worstStreak = Math.max(worstStreak, streak); }
+    open = open.filter(p => p.t.z >= d); // 前一天以前出場的才把錢拿回來（當天進當天出的也會在隔天結算，不會卡住名額）
     const value = () => cash + open.reduce((s, p) => s + p.amt * ((p.t.close[d] ?? p.last) / p.t.px), 0);
     const cand = byDay[d].filter(t => !open.some(p => p.t.code === t.code)).sort(() => rand() - 0.5);
     offered += cand.length;

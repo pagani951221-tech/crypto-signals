@@ -130,6 +130,13 @@ async function attention(from, to) {
   return Object.fromEntries(Object.entries(db).map(([c, v]) => [c, [...v].sort()]));
 }
 
+// 加權指數（Yahoo ^TWII）近一年日收盤：[{ t, c }]
+async function taiex() {
+  const r = await fetch('https://query1.finance.yahoo.com/v8/finance/chart/%5ETWII?range=1y&interval=1d', { headers: { 'User-Agent': 'Mozilla/5.0' } });
+  const q = (await r.json()).chart.result[0];
+  return q.timestamp.map((t, i) => ({ t: t * 1000, c: q.indicators.quote[0].close[i] })).filter(x => x.c != null);
+}
+
 // 往後數 n 個交易日（只跳過週末，沒扣國定假日，所以是「約」）
 function addWeekdays(t, n) {
   let x = t;
@@ -137,4 +144,4 @@ function addWeekdays(t, n) {
   return x;
 }
 
-module.exports = { TW_COST, ADJ, universe, universeAll, bars, revenue, flows, disposals, attention, addWeekdays };
+module.exports = { TW_COST, ADJ, universe, universeAll, bars, revenue, flows, disposals, attention, taiex, addWeekdays };

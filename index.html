@@ -222,8 +222,9 @@
   <section class="today" aria-live="polite">
     <h2 id="headline">讀取行情中…</h2>
     <p id="reason"></p>
+    <p class="alert" id="mktline" hidden></p>
     <p id="status"></p>
-    <p class="alert" id="twnote" hidden><b>台股是實驗性質：</b>範圍是上市＋上櫃全部普通股，規則和加密貨幣不同：收盤創 52 週新高、成交金額放大到近 20 天平均的 2 倍以上、而且最新月營收創 12 個月新高才買，跌破 50 日均線才賣。這條規則勝率只有約三成，是靠少數大漲的股票撐起平均，連續停損很正常；2017 年整年虧錢，2018、2022 年接近打平，賺錢集中在多頭年。近 20 天平均每天成交不到 1,000 萬元的股票不給訊號。用有限資金模擬整個帳戶（同時最多 10 檔、每檔約 1/10 資金）：2021 年起年化約 +30%，但途中曾從高點回落約 28%、最久將近一年半沒創新高、連虧十幾筆很常見；同期買進持有 0050 年化約 +24%。2017 年起整段算則輸給 0050，所以不一定能贏過單純持有 0050。回測只有目前仍上市櫃的股票，用含下市股票的行情估計，成績每筆約偏高 0.1 個百分點，影響不大。持有檔數太少（例如 5 檔）時，結果很看運氣。資料每個交易日 14:40 後由雲端更新（來源：證交所、櫃買中心、Yahoo Finance，價格為還原權息價）。只做多、不開槓桿。</p>
+    <p class="alert" id="twnote" hidden><b>台股是實驗性質：</b>範圍是上市＋上櫃全部普通股，規則和加密貨幣不同：收盤創 52 週新高、成交金額放大到近 20 天平均的 2 倍以上、而且最新月營收創 12 個月新高才買，跌破 50 日均線才賣。這條規則勝率只有約三成，是靠少數大漲的股票撐起平均，連續停損很正常；2017 年整年虧錢，2018、2022 年接近打平，賺錢集中在多頭年。近 20 天平均每天成交不到 1,000 萬元的股票不給訊號。用有限資金模擬整個帳戶（同時最多 10 檔、每檔約 1/10 資金）：2017 年起年化約 +32%（同期買進持有 0050 約 +22%），但途中曾從高點回落約 30%、最久將近兩年沒創新高、連虧十幾筆很常見；2018 年整年虧約 16%。回測只有目前仍上市櫃的股票，用含下市股票的行情估計，成績每筆約偏高 0.1 個百分點，影響不大。持有檔數太少（例如 5 檔）時，結果很看運氣。資料每個交易日 14:40 後由雲端更新（來源：證交所、櫃買中心、Yahoo Finance，價格為還原權息價）。只做多、不開槓桿。</p>
     <div class="pick">
       <label for="pick" id="pickl">查看其他幣</label>
       <input id="pick" list="coinlist" autocomplete="off" spellcheck="false" placeholder="選擇或輸入代號，例如 PEPE">
@@ -354,7 +355,12 @@ ${exitTxt}`, text: head + sizeText(live, p, d, r),
         alert: { key: `${d}|${item.lastT ?? bars.at(-1).t}`, body: `${s}　進場約 ${price(live)}　止損 ${price(p.stop)}　${exitTxt}` } };
     }
     const held = p.held ?? bars.length - p.in;
-    const now = `<p>規則已在 ${when(p.t ?? bars[p.in].t)} ${s}，${isTW() ? '收盤價' : '即時價'} ${price(live)}（${pct(d * (live / p.px - 1))}）。</p>${levels(p)}${holdText(d, bars, p, held)}`;
+    const wk = p.weak, weakTxt = wk ? `<h4>轉弱檢查（參考，不是出場條件）</h4><ul class="weak">
+      <li>${wk.below20 ? '<b>收盤在 20 日均線之下</b>' : '收盤在 20 日均線之上'}</li>
+      <li>離持有期間最高收盤 ${wk.off < -0.15 ? `<b>${pct(wk.off)}</b>` : pct(wk.off)}</li>
+      ${wk.rs == null ? '' : `<li>近 20 天比大盤${wk.rs >= 0 ? '強' : '弱'} ${wk.rs < -0.1 ? `<b>${`${(Math.abs(wk.rs) * 100).toFixed(1)}%`}</b>` : `${(Math.abs(wk.rs) * 100).toFixed(1)}%`}</li>`}</ul>
+      <p class="meta">研究十七回測過：跌破 20 日均線、從高點回落 15%、比大盤弱 10% 就提早出場，長期都比照規則（跌破 50 日均線才賣）賺得少。這幾項只是讓你知道目前狀況；想降低風險可以自己先賣一部分。</p>` : '';
+    const now = `<p>規則已在 ${when(p.t ?? bars[p.in].t)} ${s}，${isTW() ? '收盤價' : '即時價'} ${price(live)}（${pct(d * (live / p.px - 1))}）。</p>${levels(p)}${holdText(d, bars, p, held)}${weakTxt}`;
     if (f === 'stop' || f === 'target') return { pri: 1, k: 'wait', label: '觀望', one: `已到${f === 'stop' ? '止損' : '止盈'}位`, text: `${now}<p class="alert">即時價已到${f === 'stop' ? '止損' : '止盈'}位，這筆應已出場，等下一次訊號。</p>` };
     return { pri: 2, k: 'hold', label: d > 0 ? '持有多單' : '持有空單', one: `${pct(d * (live / p.px - 1))}，已持有 ${dur(held)}${isTW() ? `（最多 ${twRule.hold}）` : ''}`, text: `${now}<p>已進場者照這組${p.target == null ? '止損與 50 日均線' : '止損止盈'}續抱；未進場者不追價，等下一次訊號。</p>` };
   }
@@ -600,6 +606,10 @@ ${exitTxt}`, text: head + sizeText(live, p, d, r),
     try { const res = await fetch('tw.json', { cache: 'no-cache' }); if (!res.ok) throw 0; j = await res.json(); }
     catch { $('go').disabled = false; $('headline').textContent = '暫時讀不到台股資料'; $('reason').textContent = '台股資料由雲端每個交易日 14:40 後更新，請稍後再試。'; $('status').textContent = ''; return; }
     twCost = j.cost; twValid = j.nValid ?? j.stocks.length; twRule = j.rule ?? twRule; twFlowDays = j.flowDays ?? [];
+    const mk = j.market, num = v => v.toLocaleString();
+    $('mktline').hidden = !mk;
+    if (mk) $('mktline').innerHTML = `<b>大盤：</b>加權指數 ${num(mk.c)}，離 60 日高點 ${pct(mk.off)}；${[['20', mk.m20], ['50', mk.m50], ['200', mk.m200]].map(([n, v]) => `${n} 日均線${mk.c >= v ? '之上' : '<b>之下</b>'}`).join('、')}。全部股票中 ${pct0(mk.breadth)} 站上自己的 50 日均線。`
+      + (mk.c < mk.m50 ? '大盤正在轉弱。' : '') + `回測（研究十七）：大盤一轉弱就全部出場，長期反而賺得少很多、回落也沒有變小，所以規則不因大盤出場；擔心的話可以自己減碼，例如先賣一半。`;
     items = j.stocks.map(s => ({
       sym: s.code, label: s.name, full: `${s.name}（${s.code}）`, tw: true, mkt: s.mkt, rev: s.rev, flow: s.flow, disp: s.disp, att: s.att, show: true, illiquid: s.illiquid, liq: s.liq, live: s.close, lastT: s.lastT,
       bars: s.chart ? s.chart.map(c => ({ t: c[0], o: c[1], h: c[2], l: c[3], c: c[4] })) : null,
@@ -685,6 +695,7 @@ ${exitTxt}`, text: head + sizeText(live, p, d, r),
     savePrefs();
     $('go').disabled = true;
     $('twnote').hidden = true;
+    $('mktline').hidden = true;
     renderLive(null);
     renderYtd(null);
     $('status').textContent = '讀取成交量排行…';

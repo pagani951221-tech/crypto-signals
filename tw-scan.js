@@ -5,7 +5,7 @@ const fs = require('fs');
 const S = require('./strategy.js');
 const R = require('./tw-rule.js');
 const { send } = require('./telegram.js');
-const { TW_COST, universeAll, bars, revenue, flows, disposals, attention, addWeekdays } = require('./tw-data.js');
+const { TW_COST, universeAll, bars, revenue, flows, disposals, attention, taiex, addWeekdays } = require('./tw-data.js');
 
 const REV = '.state/tw-rev.json';
 const LOG = 'tw-log.json'; // 上線後真實發出的訊號，只新增不改寫（規則以後改了，舊紀錄也不會被重算） // 月營收歷史，由 Actions 快取保存，每天只補抓缺的月份
@@ -53,6 +53,16 @@ async function loadRevenue() {
   // 注意股：最近 10 個交易日（含今天，若已公布）被公布注意幾次
   const d10 = ymd(ref.b.at(-10).t), attOf = await attention(d10, today).catch(() => ({}));
   console.log(`注意股：最近 10 個交易日有 ${Object.keys(attOf).length} 檔`);
+  // 大盤與市場寬度（研究十七：轉弱就出場並沒有比較好，所以只顯示給人參考）
+  const avg = (a, n) => a.slice(-n).reduce((s, v) => s + v, 0) / n;
+  let market = null;
+  try {
+    const ix = (await taiex()).map(x => x.c), live = data.filter(d => d.b.length >= 50);
+    market = { c: Math.round(ix.at(-1)), m20: Math.round(avg(ix, 20)), m50: Math.round(avg(ix, 50)), m200: Math.round(avg(ix, 200)),
+      off: +(ix.at(-1) / Math.max(...ix.slice(-60)) - 1).toFixed(4), r20: +(ix.at(-1) / ix.at(-21) - 1).toFixed(4),
+      breadth: +(live.filter(d => d.b.at(-1).c > avg(d.b.map(x => x.c), 50)).length / live.length).toFixed(3) };
+  } catch (e) { console.log('讀不到加權指數', e.message); }
+  console.log('大盤：', JSON.stringify(market));
   const flowOf = code => { const v = fl.map(f => f[1][code]).filter(Boolean); return v.length ? [0, 1, 2].map(j => Math.round(v.reduce((s, x) => s + x[j], 0) / 1000)) : null; };
   for (const d of data) {
     const last20 = d.b.slice(-20);
@@ -86,6 +96,10 @@ async function loadRevenue() {
       const entryT = p.in < b.length ? b[p.in].t : addWeekdays(b.at(-1).t, 1);
       o.pos = { px: price(p.px), stop: price(p.stop), target: null, ma: price(ma50.at(-1)), t: entryT,
         held: p.in < b.length ? b.length - p.in : null, deadline: addWeekdays(entryT, R.HOLD - 1) + CLOSE };
+      if (p.in < b.length) { // 轉弱檢查（只給人參考）：收在 20 日均線下、離持有期間最高收盤多遠、近 20 天比大盤強弱
+        const cs = b.map(x => x.c), top = Math.max(...cs.slice(p.in));
+        o.pos.weak = { below20: cs.at(-1) < avg(cs, 20), off: +(cs.at(-1) / top - 1).toFixed(4), rs: market ? +(cs.at(-1) / cs.at(-21) - 1 - market.r20).toFixed(4) : null };
+      }
     }
     const t = r.trades.at(-1);
     if (t && t.out === b.length - 1) o.closed = { why: t.why, px: price(t.px), exit: price(t.exit), stop: price(t.stop) };
@@ -117,7 +131,7 @@ async function loadRevenue() {
 
   fs.writeFileSync('tw.json', JSON.stringify({
     updated: new Date().toISOString(), lastT, n: data.length, nValid: data.filter(d => d.ok).length, minLiq: R.MIN_LIQ, cost: TW_COST,
-    flowDays: fl.map(f => f[0]).reverse(),
+    flowDays: fl.map(f => f[0]).reverse(), market,
     ytd,
     rule: { name: R.NAME, sl: R.SL, hold: R.HOLD },
     val: { pass: val.pass, rows: val.rows.map(r => ({ ...r, st: clean(r.st) })), wf: clean(val.wf), recent: clean(val.recent), total: clean(val.total),
@@ -185,6 +199,7 @@ async function loadRevenue() {
   ];
   if (!blocks.length && !test) return;
   const head = test ? `測試訊息：台股通知正常。\n今天新的進場訊號 ${entries.length} 檔、出場 ${exits.length} 檔。` : '台股（實驗性）收盤：今天要處理的事';
-  await send([head, ...blocks].join('\n\n')
+  const mkt = market ? `大盤：加權指數 ${market.c.toLocaleString()}，離 60 日高點 ${pct(market.off)}，${market.c < market.m50 ? '在 50 日均線之下（轉弱）' : '在 50 日均線之上'}；規則不因大盤出場，擔心可以自己減碼` : null;
+  await send([head, ...(mkt ? [mkt] : []), ...blocks].join('\n\n')
     + `\n\n台股是實驗性質：勝率約三成，靠少數大賺的單撐起平均，連續停損很正常。\n頁面：${PAGE}\n歷史回測不保證未來獲利，這不是投資建議。`);
 })().catch(e => { console.error(e); process.exit(1); });
