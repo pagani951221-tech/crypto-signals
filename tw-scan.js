@@ -5,7 +5,7 @@ const fs = require('fs');
 const S = require('./strategy.js');
 const R = require('./tw-rule.js');
 const { send } = require('./telegram.js');
-const { TW_COST, universeAll, bars, revenue, flows, addWeekdays } = require('./tw-data.js');
+const { TW_COST, universeAll, bars, revenue, flows, disposals, addWeekdays } = require('./tw-data.js');
 
 const REV = '.state/tw-rev.json';
 const LOG = 'tw-log.json'; // 上線後真實發出的訊號，只新增不改寫（規則以後改了，舊紀錄也不會被重算） // 月營收歷史，由 Actions 快取保存，每天只補抓缺的月份
@@ -45,6 +45,11 @@ async function loadRevenue() {
   const fl = [];
   for (const x of ref.b.slice(-7).reverse()) { if (fl.length === 5) break; const f = await flows(ymd(x.t)); if (f) fl.push([ymd(x.t), f]); }
   console.log(`法人買賣超：${fl.map(f => f[0]).join('、') || '讀不到'}`);
+  // 處置股：最近一個月公布、今天以後仍有效（含明天才開始）的處置
+  const today = ymd(Date.now()), dispOf = {};
+  for (const d of (await disposals(ymd(Date.now() - 31 * 864e5), today).catch(() => [])).filter(d => d.end >= today).sort((a, b) => a.start.localeCompare(b.start)))
+    dispOf[d.code] = [d.start, d.end, d.minutes, d.all ? 1 : 0];
+  console.log(`處置股：${Object.keys(dispOf).length} 檔`);
   const flowOf = code => { const v = fl.map(f => f[1][code]).filter(Boolean); return v.length ? [0, 1, 2].map(j => Math.round(v.reduce((s, x) => s + x[j], 0) / 1000)) : null; };
   for (const d of data) {
     const last20 = d.b.slice(-20);
@@ -69,7 +74,8 @@ async function loadRevenue() {
       own: { n: r.own.n, win: r3(r.own.win), avg: r3(r.own.avg), worst: r3(r.own.worst), payoff: Number.isFinite(r.own.payoff) ? r3(r.own.payoff) : null } };
     if (!d.ok) o.illiquid = true;
     const f5 = flowOf(d.code);
-    if (f5) o.flow = f5; // 最近 5 個交易日外資、投信、自營商淨買（張）
+    if (f5) o.flow = f5;
+    if (dispOf[d.code]) o.disp = dispOf[d.code]; // [起, 迄, 每幾分鐘撮合, 是否每筆都要預收款券] // 最近 5 個交易日外資、投信、自營商淨買（張）
     if (d.f) o.rev = [d.f.ym, d.f.yoy1, d.f.high12 ? 1 : 0]; // 最新已公布月營收：月份、年增 %、是否創 12 個月新高
     // 還原權息價與實際價只在過去不同；最新一根相同，所以進場、止損、50 日均線直接用
     if (p) {
@@ -165,6 +171,7 @@ async function loadRevenue() {
       `參考進場 ${s.pos.px}（今天收盤），明天開盤附近買進；若一字漲停整天買不到就放棄這筆`,
       `止損 ${s.pos.stop}（${pct(s.pos.stop / s.pos.px - 1)}），盤中碰到就出場`,
       `沒有固定止盈：收盤跌破 50 日均線（目前 ${s.pos.ma}）就出場`,
+      ...(s.disp ? [`處置股（到 ${s.disp[1].slice(5).replace('-', '/')}）：約每 ${s.disp[2] ?? '幾'} 分鐘撮合一次，${s.disp[3] ? '每筆買進都要先把錢存進券商' : '單筆 10 張或當天累積 30 張以上要先把錢存進券商'}；成交價可能和開盤價差比較多`] : []),
       `營收：${s.rev ? `${s.rev[0]} 月營收年增 ${s.rev[1] == null ? '—' : pct(s.rev[1] / 100)}，創 12 個月新高` : '—'}`,
       `新聞：https://tw.stock.yahoo.com/quote/${s.code}.${s.mkt}/news`,
       `預計持有：通常 ${hold.med} 個交易日，最晚約 ${day(s.pos.deadline)} 收盤出場`,

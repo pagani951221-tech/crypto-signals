@@ -38,7 +38,7 @@ function prep(b) {
 // 漲跌停 ±10%，價位跳動單位會讓實際漲停約 9.5～10%，用 9.5% 判斷
 const LIM = 0.095;
 function run(b, rev, opt = {}) {
-  const { hold = HOLD, sl = SL, ma: maN = 50, trail = 0, fill } = opt;
+  const { hold = HOLD, sl = SL, ma: maN = 50, trail = 0, fill, skip } = opt; // skip(i)：第 i 根（進場日）不買，研究十五用
   const lockUp = i => b[i].l >= b[i - 1].c * (1 + LIM), lockDown = i => b[i].h <= b[i - 1].c * (1 - LIM);
   const lock = { in: 0, inMissed: 0, out: 0 };
   const x = prep(b), trades = [], last = b.length - 1;
@@ -65,7 +65,7 @@ function run(b, rev, opt = {}) {
       }
     }
     // 創新高要是「剛成立」：前一天不能也是訊號
-    if (!p && x.entry[i] && !x.entry[i - 1] && x.liq[i] >= MIN_LIQ && (rev === undefined || features(rev, b[i].t)?.high12)) {
+    if (!p && x.entry[i] && !x.entry[i - 1] && x.liq[i] >= MIN_LIQ && (rev === undefined || features(rev, b[i].t)?.high12) && !(skip && skip(Math.min(i + 1, last)))) {
       if (i === last) { state = 'enter'; p = open(i, b[i].c); }
       else if (fill && lockUp(i + 1)) {
         lock.in++;

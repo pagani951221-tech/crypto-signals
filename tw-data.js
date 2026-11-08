@@ -94,6 +94,25 @@ async function flows(date) { // date：'YYYY-MM-DD'
   return Object.fromEntries(rows.map(r => [r[0].trim(), r.slice(1)]).filter(r => COMMON.test(r[0])));
 }
 
+// 處置股公告（上市 punish、上櫃 disposal）：from、to＝'YYYY-MM-DD'（公布日期範圍）。回傳 [{ code, start, end, minutes, all }]，日期 YYYY-MM-DD
+// 研究十五：進場時已是處置股不需要避開（擋掉反而變差），所以只用來提醒撮合方式與預收款券
+async function disposals(from, to) {
+  const roc = s => (String(s).match(/\d{2,3}\/\d{1,2}\/\d{1,2}/g) || []).map(x => { const [y, m, d] = x.split('/').map(Number); return `${y + 1911}-${String(m).padStart(2, '0')}-${String(d).padStart(2, '0')}`; });
+  const D = { 一: 1, 二: 2, 三: 3, 四: 4, 五: 5, 六: 6, 七: 7, 八: 8, 九: 9 };
+  const cn = t => /^\d+$/.test(t) ? +t : t.includes('十') ? (D[t.split('十')[0]] ?? 1) * 10 + (D[t.split('十')[1]] ?? 0) : D[t] ?? null;
+  const mins = s => { const m = String(s).match(/每([一二三四五六七八九十\d]+)分鐘/); return m ? cn(m[1]) : null; };
+  const ua = { headers: { 'User-Agent': 'Mozilla/5.0' } }, get = url => fetch(url, ua).then(r => r.json()).catch(() => ({}));
+  const [a, b] = await Promise.all([
+    get(`https://www.twse.com.tw/rwd/zh/announcement/punish?startDate=${from.replace(/-/g, '')}&endDate=${to.replace(/-/g, '')}&response=json`),
+    get(`https://www.tpex.org.tw/www/zh-tw/bulletin/disposal?startDate=${from.replace(/-/g, '/')}&endDate=${to.replace(/-/g, '/')}&response=json`),
+  ]);
+  const rows = [
+    ...(a.data || []).map(r => [r[2], r[6], r[8]]),
+    ...(b.tables?.[0]?.data || []).map(r => [r[2], r[5], r[8]]),
+  ].map(([c, p, t]) => { const [st, en] = roc(p); return { code: String(c).trim(), start: st, end: en || st, minutes: mins(t), all: !/單筆達[十１0-9一二三四五六七八九]+交易單位/.test(t) }; }); // all：每筆委託都要預收款券
+  return rows.filter(r => COMMON.test(r.code) && r.start);
+}
+
 // 往後數 n 個交易日（只跳過週末，沒扣國定假日，所以是「約」）
 function addWeekdays(t, n) {
   let x = t;
@@ -101,4 +120,4 @@ function addWeekdays(t, n) {
   return x;
 }
 
-module.exports = { TW_COST, ADJ, universe, universeAll, bars, revenue, flows, addWeekdays };
+module.exports = { TW_COST, ADJ, universe, universeAll, bars, revenue, flows, disposals, addWeekdays };
